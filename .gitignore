@@ -1,0 +1,18 @@
+# Virtual environments
+.venv/
+ai_workflow_agent/.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Environment variables
+ai_workflow_agent/.env
+.env
+.env.*
+
+# Local notes
+ideas.txt
+
+.git/
