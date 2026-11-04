@@ -1,17 +1,17 @@
-from uuid import UUID
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 
 from src.repositories.workflow_repository import WorkflowRepository
 from src.db.models.workflow import Workflow
 from src.enums import WorkflowStatus
+from src.schemas.workflow import WorkflowResponse
 
 
 class WorkflowService:
     def __init__(self, session_factory: async_sessionmaker):
         self.session_factory = session_factory
 
-    async def create(self, instruction: str) -> tuple[UUID, WorkflowStatus]:
+    async def create(self, instruction: str) -> WorkflowResponse:
         workflow = Workflow(
             instruction=instruction,
             status=WorkflowStatus.QUEUED
@@ -22,4 +22,7 @@ class WorkflowService:
 
             workflow = await repo.create(workflow)
 
-        return workflow.id, workflow.status
+        return WorkflowResponse(
+            id=workflow.id,
+            status=workflow.status
+        )

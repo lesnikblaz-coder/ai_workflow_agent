@@ -9,6 +9,6 @@ workflows_router = APIRouter(
     tags=["Workflows"]
 )
 
-@workflows_router.post("")
-async def create_workflow(request: wf.WorkflowCreateRequest, service: deps.WorkflowServiceDep):
-    return service.create(instruction=request.instruction)
+@workflows_router.post("", response_model=wf.WorkflowResponse)
+async def create_workflow(request: wf.WorkflowCreateRequest, service: deps.WorkflowServiceDep) -> wf.WorkflowResponse:
+    return await service.create(instruction=request.instruction)
