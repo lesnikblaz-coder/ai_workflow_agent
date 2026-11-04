@@ -24,5 +24,37 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  test_db:
+    image: postgres:17
+    container_name: test_db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${TEST_DB_USER}
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD}
+      POSTGRES_DB: ${TEST_DB_NAME}
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  tests:
+    build: .
+    command: python -m pytest -v
+    env_file:
+      - .env
+    environment:
+      DB_USER: ${TEST_DB_USER}
+      DB_PASSWORD: ${TEST_DB_PASSWORD}
+      DB_NAME: ${TEST_DB_NAME}
+      DB_HOST: ${TEST_DB_HOST}
+      DB_PORT: ${TEST_DB_PORT}
+    depends_on:
+      test_db:
+        condition: service_healthy
+
 volumes:
   postgres_data:
