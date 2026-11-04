@@ -1,3 +1,5 @@
+from uuid import UUID
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.db.models.workflow import Workflow
@@ -9,5 +11,14 @@ class WorkflowRepository:
 
     async def create(self, workflow: Workflow) -> Workflow:
         self.session.add(workflow)
+
         await self.session.flush()
+
         return workflow
+
+    async def get(self, workflow_id: UUID) -> Workflow | None:
+        stmt = select(Workflow).where(Workflow.id == workflow_id)
+
+        result = await self.session.execute(stmt)
+
+        return result.scalar_one_or_none()
