@@ -21,15 +21,15 @@ class Workflow(Base):
     status: Mapped[WorkflowStatus] = mapped_column(Enum(WorkflowStatus), nullable=False, default=WorkflowStatus.QUEUED)
 
     # completed research report
-    result: Mapped[str] = mapped_column(String, nullable=True)
+    result: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # failure information, if applicable
-    error_message: Mapped[str] = mapped_column(String, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # when execution began
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # when execution finished
-    finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
