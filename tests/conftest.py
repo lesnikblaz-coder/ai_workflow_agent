@@ -9,6 +9,7 @@ from src.db.base import Base
 from src.main import app
 from src.api import dependencies as deps
 from src.services.workflow_service import WorkflowService
+from src.schemas.workflow import WorkflowPostResponse
 
 TEST_DATABASE_URL = (f"postgresql+asyncpg://"
                      f"{os.getenv('TEST_DB_USER')}:"
@@ -85,3 +86,12 @@ async def client(test_session_factory):
 
     finally:
         app.dependency_overrides.clear()
+
+@pytest_asyncio.fixture
+async def workflow_create(test_session_factory):
+    service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow_post_response: WorkflowPostResponse = await service.create(instruction="test instruction")
+    return workflow_post_response
