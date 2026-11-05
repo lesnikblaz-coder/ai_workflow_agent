@@ -20,7 +20,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -34,7 +34,7 @@ services:
       POSTGRES_PASSWORD: ${TEST_DB_PASSWORD}
       POSTGRES_DB: ${TEST_DB_NAME}
     ports:
-      - "5434:5432"
+      - "127.0.0.1:5434:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -52,6 +52,8 @@ services:
       DB_NAME: ${TEST_DB_NAME}
       DB_HOST: ${TEST_DB_HOST}
       DB_PORT: ${TEST_DB_PORT}
+    volumes:
+      - .:/src
     depends_on:
       test_db:
         condition: service_healthy
