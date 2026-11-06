@@ -16,3 +16,7 @@ class WorkflowPostResponse(BaseModel):
 class WorkflowGetResponse(BaseModel):
     status: WorkflowStatus
     result: str | None
+
+class ClaimedWorkflow(BaseModel):
+    id: UUID
+    instruction: str
