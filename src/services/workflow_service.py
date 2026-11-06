@@ -51,10 +51,20 @@ class WorkflowService:
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
-            await repo.workflow_completion(workflow_id, result)
+            updated = await repo.workflow_completion(workflow_id, result)
+
+            if updated is None:
+                raise RuntimeError(
+                    f"Error: Cannot update completed workflow {workflow_id}"
+                )
 
     async def fail(self, workflow_id: UUID, error_msg: str):
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
-            await repo.workflow_fail(workflow_id, error_msg)
+            updated = await repo.workflow_fail(workflow_id, error_msg)
+
+            if updated is None:
+                raise RuntimeError(
+                    f"Error: Cannot update failed workflow {workflow_id}"
+                )
