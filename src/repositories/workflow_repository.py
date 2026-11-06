@@ -59,16 +59,13 @@ class WorkflowRepository:
         ):
             return None
 
-        # temp placeholder
-        result = "Result completed for: <instruction>"
-
         workflow.status = WorkflowStatus.COMPLETED
         workflow.result = result
         workflow.finished_at = datetime.now(timezone.utc)
 
         return workflow
 
-    async def workflow_fail(self, workflow_id: UUID) -> Workflow | None:
+    async def workflow_fail(self, workflow_id: UUID, error_msg: str) -> Workflow | None:
         workflow = await self._get_workflow_by_id(workflow_id)
 
         if (
@@ -76,9 +73,6 @@ class WorkflowRepository:
                 or workflow.status != WorkflowStatus.RUNNING
         ):
             return None
-
-        # temp placeholder
-        error_msg = "Workflow failed for: <instruction>"
 
         workflow.status = WorkflowStatus.FAILED
         workflow.error_message = error_msg

@@ -24,7 +24,9 @@ async def process_one_workflow(service: WorkflowService) -> bool:
     except Exception:
         logger.exception("Workflow %s failed", workflow.id)
 
-        await service.fail(workflow.id)
+        error_msg = f"Workflow {workflow.id} failed."
+
+        await service.fail(workflow.id, error_msg)
 
     return True
 

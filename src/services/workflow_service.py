@@ -53,8 +53,8 @@ class WorkflowService:
 
             await repo.workflow_completion(workflow_id, result)
 
-    async def fail(self, workflow_id: UUID):
+    async def fail(self, workflow_id: UUID, error_msg: str):
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
-            await repo.workflow_fail(workflow_id)
+            await repo.workflow_fail(workflow_id, error_msg)
