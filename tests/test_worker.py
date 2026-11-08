@@ -35,9 +35,10 @@ async def test_two_workers_cannot_claim_same_workflow():
             service_b.claim_next()
         )
 
-        claimed = [r for r in results if r is None]
+        claimed = [r for r in results if r is not None]
 
         assert len(claimed) == 1
+        assert claimed[0].id == workflow_id
 
         service = WorkflowService(
             session_factory=TestAsyncSessionLocal
