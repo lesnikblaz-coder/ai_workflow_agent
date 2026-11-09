@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     DB_PORT: int
     DB_NAME: str
 
+    GEMINI_API_KEY: str
+
+    GEMINI_MODEL: str = "gemini-3.1-flash-lite"
+    GEMINI_MODEL_v3_8: str = "gemini-3.8-flash"
+
     @property
     def async_db_url(self) -> str:
         return (
