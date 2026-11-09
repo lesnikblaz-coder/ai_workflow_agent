@@ -4,7 +4,10 @@ import httpx
 
 from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from unittest.mock import AsyncMock, MagicMock
+from google.genai.client import AsyncClient
 
+from src.agents.research_agent import ResearchAgent
 from src.db.base import Base
 from src.main import app
 from src.api import dependencies as deps
@@ -95,3 +98,15 @@ async def workflow_create(test_session_factory):
 
     workflow_post_response: WorkflowPostResponse = await service.create(instruction="test instruction")
     return workflow_post_response
+
+@pytest_asyncio.fixture
+async def mock_gemini_client():
+    client = MagicMock(spec=AsyncClient)
+    client.interactions.create = AsyncMock()
+    return client
+
+@pytest_asyncio.fixture
+async def mock_research_agent(mock_gemini_client):
+    return ResearchAgent(
+        client=mock_gemini_client
+    )
