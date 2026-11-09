@@ -51,7 +51,7 @@ services:
 
   tests:
     build: .
-    command: python -m pytest -v
+    command: python -u -m pytest -v -s
     env_file:
       - .env
     environment:
