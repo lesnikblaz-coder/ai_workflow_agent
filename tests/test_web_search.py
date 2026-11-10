@@ -3,7 +3,7 @@ import pytest
 
 from pydantic import HttpUrl, ValidationError
 
-from src.tools.web_search import WebSearch
+from src.tools.web_search import WebSearchTool
 from src.schemas.search import SearchResult
 
 
@@ -29,7 +29,7 @@ async def test_web_search_success():
     transport = httpx.MockTransport(mock_search_response)
 
     async with httpx.AsyncClient(transport=transport) as client:
-        tool = WebSearch(
+        tool = WebSearchTool(
             client=client,
             api_key="fake-test-key"
         )
@@ -58,7 +58,7 @@ async def test_web_search_empty_results():
     transport = httpx.MockTransport(mock_empty_search_response)
 
     async with httpx.AsyncClient(transport=transport) as client:
-        tool = WebSearch(
+        tool = WebSearchTool(
             client=client,
             api_key="fake-test-key"
         )
@@ -84,7 +84,7 @@ async def test_unsuccessful_web_search_raises():
     transport = httpx.MockTransport(mock_unsuccessful_search_response)
 
     async with httpx.AsyncClient(transport=transport) as client:
-        tool = WebSearch(
+        tool = WebSearchTool(
             client=client,
             api_key="fake-test-key"
         )
@@ -116,7 +116,7 @@ async def test_invalid_provider_data_missing_url():
     transport = httpx.MockTransport(mock_invalid_provider_data)
 
     async with httpx.AsyncClient(transport=transport) as client:
-        tool = WebSearch(
+        tool = WebSearchTool(
             client=client,
             api_key="fake-test-key"
         )
@@ -147,7 +147,7 @@ async def test_missing_provider_data():
     transport = httpx.MockTransport(mock_missing_provider_data)
 
     async with httpx.AsyncClient(transport=transport) as client:
-        tool = WebSearch(
+        tool = WebSearchTool(
             client=client,
             api_key="fake-test-key"
         )

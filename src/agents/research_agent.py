@@ -10,7 +10,17 @@ class ResearchAgent:
     def __init__(self, client: genai.client.AsyncClient):
         self.client = client
 
-    async def run(self, instruction: str) -> str:
+    async def run(self, instruction: str) -> ResearchPlan:
+        """
+        Generate a research plan based on the given instruction.
+
+        Args:
+            instruction: user's research instructions
+
+        Returns:
+            ResearchPlan schema
+        """
+
         interaction = await self.client.interactions.create(
             model=settings.GEMINI_MODEL,
             system_instruction=RESEARCH_PLANNER_INSTRUCTIONS,
@@ -25,8 +35,6 @@ class ResearchAgent:
         if not interaction.output_text:
             raise LLMEmptyOutputError()
 
-        plan = ResearchPlan.model_validate_json(
+        return ResearchPlan.model_validate_json(
             interaction.output_text
         )
-
-        return plan.model_dump_json()
