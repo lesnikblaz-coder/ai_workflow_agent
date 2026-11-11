@@ -63,7 +63,10 @@ class ResearchService:
         start_time = time.perf_counter()
 
         search_tasks = [
-            self.search_tool.search(query)
+            self.search_tool.search(
+                query=query,
+                max_results=self.MAX_RESULTS_PER_QUERY
+            )
             for query in queries
         ]
 
