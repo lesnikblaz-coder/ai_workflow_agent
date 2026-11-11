@@ -32,8 +32,13 @@ class ResearchService:
 
         search_results: dict[str, list[SearchResult]] = {}
 
+        # Remove duplicate search queries
+        unique_queries = list(
+            dict.fromkeys(research_plan.search_queries)
+        )[:3]
+
         # Execute 3 unique search queries
-        for i, query in enumerate(research_plan.search_queries[:3], start=1):
+        for i, query in enumerate(unique_queries, start=1):
             start = time.perf_counter()
 
             search_results[query] = await self.search_tool.search(
