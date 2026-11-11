@@ -49,6 +49,6 @@ class ResearchService:
             )
 
         duration_3 = time.perf_counter() - research_start
-        logger.info("Research synthesis: %.2f s", duration_3)
+        logger.info("Research planning + retrieval: %.2f s", duration_3)
 
         return research_plan, search_results
