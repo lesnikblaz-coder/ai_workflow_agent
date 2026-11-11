@@ -43,7 +43,10 @@ class ResearchService:
 
         logger.info("Research planning + retrieval: %.2f s", total_duration)
 
-        return research_plan, search_results
+        return ResearchEvidence(
+            plan=research_plan,
+            search_results=search_results
+        )
 
     async def _generate_plan(self, instruction) -> ResearchPlan:
         """Generate a research plan using the research agent."""
