@@ -1,4 +1,5 @@
 import time
+import asyncio
 
 from src.agents.research_agent import ResearchAgent
 from src.schemas.search import SearchResult
@@ -58,22 +59,22 @@ class ResearchService:
         return list(dict.fromkeys(search_queries))[:self.MAX_SEARCH_QUERIES]
 
     async def _execute_search(self, queries: list[str]) -> dict[str, list[SearchResult]]:
-        """Execute search queries and collect their results."""
-        search_results: dict[str, list[SearchResult]] = {}
+        """Execute all search queries concurrently."""
+        start_time = time.perf_counter()
 
-        for i, query in enumerate(queries, start=1):
-            start_time = time.perf_counter()
+        search_tasks = [
+            self.search_tool.search(query)
+            for query in queries
+        ]
 
-            search_results[query] = await self.search_tool.search(
-                query=query,
-                max_results=self.MAX_RESULTS_PER_QUERY
-            )
+        results = await asyncio.gather(*search_tasks)
 
-            duration = time.perf_counter() - start_time
-            logger.info(
-                "Search query %s: %.2f s",
-                i,
-                duration
-            )
+        duration = time.perf_counter() - start_time
 
-        return search_results
+        logger.info(
+            "Executed %s search queries concurrently: %.2f s",
+            len(queries),
+            duration
+        )
+
+        return dict(zip(queries, results))
