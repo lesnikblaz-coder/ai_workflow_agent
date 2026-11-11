@@ -1,30 +1,33 @@
 import asyncio
+import httpx
 
 from google import genai
 
 from src.logging_config import logger
 from src.db.base import AsyncSessionLocal, engine
 from src.services.workflow_service import WorkflowService
+from src.services.research_service import ResearchService
 from src.agents.research_agent import ResearchAgent
 from src.config import settings
 from src.exceptions.custom import WorkflowFailedError
+from src.tools.web_search import WebSearchTool
 
 
 async def process_one_workflow(
-        service: WorkflowService,
-        agent: ResearchAgent
+        workflow_service: WorkflowService,
+        research_service: ResearchService
 ) -> bool:
-    workflow = await service.claim_next()
+    workflow = await workflow_service.claim_next()
 
     if workflow is None:
         return False
 
     try:
-        plan = await agent.run(workflow.instruction)
+        result = await research_service.research(workflow.instruction)
 
-        await service.complete(
+        await workflow_service.complete(
             workflow_id=workflow.id,
-            result=plan
+            result=str(result)
         )
 
         logger.info("Completed workflow %s", workflow.id)
@@ -34,7 +37,7 @@ async def process_one_workflow(
 
         error_msg = f"Workflow {workflow.id} failed."
 
-        await service.fail(workflow.id, error_msg)
+        await workflow_service.fail(workflow.id, error_msg)
 
         raise WorkflowFailedError()
 
@@ -42,25 +45,36 @@ async def process_one_workflow(
 
 
 async def main():
-    service = WorkflowService(session_factory=AsyncSessionLocal)
+    workflow_service = WorkflowService(session_factory=AsyncSessionLocal)
 
-    aclient = genai.client.AsyncClient(
-        api_client=settings.GEMINI_API_KEY
-    )
+    aclient = genai.Client(
+        api_key=settings.GEMINI_API_KEY
+    ).aio
 
     try:
         agent = ResearchAgent(aclient)
 
-        while True:
-            logger.info("Checking database for work...")
-
-            processed = await process_one_workflow(
-                service=service,
-                agent=agent
+        async with httpx.AsyncClient() as http_client:
+            search_tool = WebSearchTool(
+                client=http_client,
+                api_key=settings.TAVILY_API_KEY
             )
 
-            if not processed:
-                await asyncio.sleep(2)
+            research_service = ResearchService(
+                agent=agent,
+                search_tool=search_tool
+            )
+
+            while True:
+                logger.info("Checking database for work...")
+
+                processed = await process_one_workflow(
+                    workflow_service=workflow_service,
+                    research_service=research_service
+                )
+
+                if not processed:
+                    await asyncio.sleep(2)
 
     finally:
         logger.info("Cleaning up resources...")
