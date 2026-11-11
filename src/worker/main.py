@@ -23,11 +23,11 @@ async def process_one_workflow(
         return False
 
     try:
-        result = await research_service.research(workflow.instruction)
+        evidence = await research_service.research(workflow.instruction)
 
         await workflow_service.complete(
             workflow_id=workflow.id,
-            result=str(result)
+            result=evidence.model_dump_json()
         )
 
         logger.info("Completed workflow %s", workflow.id)

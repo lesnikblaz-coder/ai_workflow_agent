@@ -3,7 +3,7 @@ import asyncio
 
 from src.agents.research_agent import ResearchAgent
 from src.schemas.search import SearchResult
-from src.schemas.research import ResearchPlan
+from src.schemas.research import ResearchPlan, ResearchEvidence
 from src.tools.web_search import WebSearchTool
 from src.logging_config import logger
 
@@ -16,8 +16,10 @@ class ResearchService:
         self.agent = agent
         self.search_tool = search_tool
 
-    async def research(self, instruction: str) \
-            -> tuple[ResearchPlan, dict[str, list[SearchResult]]]:
+    async def research(
+            self,
+            instruction: str
+    )-> ResearchEvidence:
         """
         Coordinates the research process.
 
@@ -26,6 +28,7 @@ class ResearchService:
         3. Execute searches.
         4. Collect and return search results.
         :param instruction:
+        :returns: ResearchEvidence
         """
 
         start_time = time.perf_counter()
