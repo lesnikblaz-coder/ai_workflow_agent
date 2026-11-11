@@ -54,7 +54,7 @@ async def main():
     try:
         agent = ResearchAgent(aclient)
 
-        async with httpx.AsyncClient() as http_client:
+        async with httpx.AsyncClient(timeout=15.0) as http_client:
             search_tool = WebSearchTool(
                 client=http_client,
                 api_key=settings.TAVILY_API_KEY
