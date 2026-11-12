@@ -39,7 +39,7 @@ async def process_one_workflow(
 
         await workflow_service.fail(workflow.id, error_msg)
 
-        raise WorkflowFailedError()
+        return True
 
     return True
 
