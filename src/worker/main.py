@@ -9,7 +9,6 @@ from src.services.workflow_service import WorkflowService
 from src.services.research_service import ResearchService
 from src.agents.research_agent import ResearchAgent
 from src.config import settings
-from src.exceptions.custom import WorkflowFailedError
 from src.tools.web_search import WebSearchTool
 
 
