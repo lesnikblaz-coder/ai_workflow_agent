@@ -3,7 +3,7 @@ import asyncio
 
 from src.agents.research_agent import ResearchAgent
 from src.schemas.search import SearchResult
-from src.schemas.research import ResearchPlan, ResearchEvidence
+from src.schemas.research import ResearchPlan, ResearchEvidence, ResearchSource
 from src.tools.web_search import WebSearchTool
 from src.logging_config import logger
 
@@ -19,7 +19,7 @@ class ResearchService:
     async def research(
             self,
             instruction: str
-    )-> ResearchEvidence:
+    ) -> ResearchEvidence:
         """
         Coordinates the research process.
 
@@ -39,14 +39,22 @@ class ResearchService:
 
         search_results = await self._execute_search(unique_queries)
 
+        sourced_results = self._build_sources(search_results)
+
         total_duration = time.perf_counter() - start_time
 
-        logger.info("Research planning + retrieval: %.2f s", total_duration)
+        logger.info("Research pipeline duration: %.2f s", total_duration)
 
-        return ResearchEvidence(
+        evidence = ResearchEvidence(
             plan=research_plan,
-            search_results=search_results
+            sourced_results=sourced_results
         )
+
+        """report = ...
+
+        return report"""
+
+        return evidence
 
     async def _generate_plan(self, instruction) -> ResearchPlan:
         """Generate a research plan using the research agent."""
@@ -87,3 +95,20 @@ class ResearchService:
         )
 
         return dict(zip(queries, results))
+
+    @staticmethod
+    def _build_sources(search_results: dict[str, list[SearchResult]]) -> list[ResearchSource]:
+        """Build sources for each generated search result for each query. (3 queries with 3 sources each => 9 sourced results)"""
+        sources = []
+
+        for query, results in search_results.items():
+            for result in results:
+                source = ResearchSource(
+                    source_id=f"S{len(sources) + 1}",
+                    search_query=query,
+                    result=result
+                )
+
+                sources.append(source)
+
+        return sources
