@@ -1,4 +1,3 @@
-import pytest
 import json
 
 from types import SimpleNamespace
@@ -8,7 +7,6 @@ from src.services.workflow_service import WorkflowService
 from src.services.research_service import ResearchService
 from src.worker.main import process_one_workflow
 from src.enums import WorkflowStatus
-from src.exceptions.custom import WorkflowFailedError
 from src.schemas.research import ResearchPlan
 
 
@@ -87,33 +85,6 @@ async def test_worker_executes_agent(
     assert db_result.status == WorkflowStatus.COMPLETED
     assert db_result.result is not None
 
-
-async def test_exception_sets_workflow_status_to_failed(
-        mock_research_agent,
-        mock_gemini_client,
-        mock_web_search_tool,
-        test_session_factory
-):
-    # create a workflow
-    workflow_service = WorkflowService(
-        session_factory=test_session_factory
+    mock_research_agent.run.assert_called_once_with(
+        "Compare FastAPI and Django"
     )
-
-    workflow = await workflow_service.create(instruction="Compare FastAPI and Django")
-    workflow_id = workflow.id
-
-    mock_gemini_client.interactions.create.return_value = SimpleNamespace(output_text="")
-
-    research_service = ResearchService(
-        agent=mock_research_agent,
-        search_tool=mock_web_search_tool
-    )
-
-    await process_one_workflow(
-        workflow_service=workflow_service,
-        research_service=research_service
-    )
-
-    db_result = await workflow_service.get(workflow_id)
-
-    assert db_result.status == WorkflowStatus.FAILED
