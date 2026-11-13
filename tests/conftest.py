@@ -12,6 +12,7 @@ from src.db.base import Base
 from src.main import app
 from src.api import dependencies as deps
 from src.services.workflow_service import WorkflowService
+from src.services.research_service import ResearchService
 from src.schemas.workflow import WorkflowPostResponse
 from src.tools.web_search import WebSearchTool
 
@@ -119,3 +120,14 @@ async def mock_research_agent(mock_gemini_client):
 @pytest_asyncio.fixture
 async def mock_web_search_tool():
     return AsyncMock(spec=WebSearchTool)
+
+
+@pytest_asyncio.fixture
+async def mock_research_service(
+        mock_research_agent,
+        mock_web_search_tool
+):
+    return ResearchService(
+        agent=mock_research_agent,
+        search_tool=mock_web_search_tool
+    )
