@@ -11,4 +11,10 @@ class ResearchPlan(BaseModel):
 
 class ResearchEvidence(BaseModel):
     plan: ResearchPlan
-    search_results: dict[str, list[SearchResult]]
+    sourced_results: list[ResearchSource]
+
+
+class ResearchSource(BaseModel):
+    source_id: str
+    search_query: str
+    result: SearchResult
