@@ -1,11 +1,14 @@
 import asyncio
 
-from sqlalchemy import select, delete
+from sqlalchemy import delete
+from types import SimpleNamespace
 
 from src.enums import WorkflowStatus
 from src.services.workflow_service import WorkflowService
+from src.services.research_service import ResearchService
 from tests.conftest import TestAsyncSessionLocal
 from src.db.models.workflow import Workflow
+from src.worker.main import process_one_workflow
 
 
 async def test_two_workers_cannot_claim_same_workflow():
@@ -93,3 +96,34 @@ async def test_verify_result_not_overwritten():
 
     assert db_workflow.status == WorkflowStatus.COMPLETED
     assert db_workflow.result == "Research completed for: Compare FastAPI and Django"
+
+
+async def test_worker_exception_sets_workflow_status_to_failed(
+        mock_research_agent,
+        mock_gemini_client,
+        mock_web_search_tool,
+        test_session_factory
+):
+    # create a workflow
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create(instruction="Compare FastAPI and Django")
+    workflow_id = workflow.id
+
+    mock_gemini_client.interactions.create.return_value = SimpleNamespace(output_text="")
+
+    research_service = ResearchService(
+        agent=mock_research_agent,
+        search_tool=mock_web_search_tool
+    )
+
+    await process_one_workflow(
+        workflow_service=workflow_service,
+        research_service=research_service
+    )
+
+    db_result = await workflow_service.get(workflow_id)
+
+    assert db_result.status == WorkflowStatus.FAILED
