@@ -7,7 +7,7 @@ from src.services.workflow_service import WorkflowService
 from src.services.research_service import ResearchService
 from src.worker.main import process_one_workflow
 from src.enums import WorkflowStatus
-from src.schemas.research import ResearchPlan
+from src.schemas.research import ResearchPlan, ResearchReport, ResearchFinding
 
 
 async def test_agent_produces_valid_plan(
@@ -45,7 +45,8 @@ async def test_agent_produces_valid_plan(
 async def test_worker_executes_agent(
         mock_research_agent,
         mock_web_search_tool,
-        test_session_factory
+        test_session_factory,
+        monkeypatch
 ):
     # create a workflow
     workflow_service = WorkflowService(
@@ -68,9 +69,28 @@ async def test_worker_executes_agent(
         )
     )
 
+    mock_research_agent.synthesize = AsyncMock(
+        return_value=ResearchReport(
+            title="",
+            summary="",
+            findings=[
+                ResearchFinding(
+                    claim="",
+                    source_ids=[""]
+                ),
+            ],
+            limitations=[""],
+        )
+    )
+
     research_service = ResearchService(
         agent=mock_research_agent,
         search_tool=mock_web_search_tool
+    )
+
+    monkeypatch.setattr(
+        "src.services.research_service.validate_citations",
+        lambda **kwargs: True
     )
 
     result = await process_one_workflow(
