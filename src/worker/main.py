@@ -21,12 +21,14 @@ async def process_one_workflow(
     if workflow is None:
         return False
 
+    logger.info("Workflow %s picked up", workflow.id)
+
     try:
-        evidence = await research_service.research(workflow.instruction)
+        report = await research_service.research(workflow.instruction)
 
         await workflow_service.complete(
             workflow_id=workflow.id,
-            result=evidence.model_dump_json()
+            result=report.model_dump_json()
         )
 
         logger.info("Completed workflow %s", workflow.id)
