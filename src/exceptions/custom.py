@@ -9,3 +9,8 @@ class WorkflowFailedError(AppException):
 class LLMEmptyOutputError(AppException):
     status_code = 502
     detail = "LLM provider returned an empty output."
+
+
+class CitationValidationError(ValueError):
+    status_code = 502
+    detail = "LLM response failed citation validation."
