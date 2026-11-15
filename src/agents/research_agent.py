@@ -50,7 +50,7 @@ class ResearchAgent:
             input=model_input,
             response_format={
                 "type": "text",
-                "mine_type": "application/json",
+                "mime_type": "application/json",
                 "schema": ResearchReport.model_json_schema()
             }
         )
