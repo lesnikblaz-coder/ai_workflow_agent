@@ -46,16 +46,16 @@ class ResearchService:
 
         sources = self._build_sources(search_results)
 
-        total_duration = time.perf_counter() - start_time
-
-        logger.info("Research pipeline duration: %.2f s", total_duration)
-
         evidence = ResearchEvidence(
             plan=research_plan,
             sources=sources
         )
 
         report = await self._synthesize(instruction, evidence)
+
+        total_duration = time.perf_counter() - start_time
+
+        logger.info("Research pipeline duration: %.2f s", total_duration)
 
         return report
 
