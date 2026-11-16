@@ -13,7 +13,7 @@ from src.schemas.research import ResearchPlan, ResearchReport, ResearchFinding
 async def test_agent_produces_valid_plan(
         mock_gemini_client,
         mock_research_agent
-):
+) -> None:
     interaction = SimpleNamespace(
         output_text=json.dumps({
             "topic": "FastAPI vs Django",
@@ -47,7 +47,7 @@ async def test_worker_executes_agent(
         mock_web_search_tool,
         test_session_factory,
         monkeypatch
-):
+) -> None:
     # create a workflow
     workflow_service = WorkflowService(
         session_factory=test_session_factory
@@ -108,3 +108,33 @@ async def test_worker_executes_agent(
     mock_research_agent.run.assert_called_once_with(
         "Compare FastAPI and Django"
     )
+
+
+async def test_synthesis_sends_expected_response_format_to_llm(
+        mock_gemini_client,
+        mock_research_agent
+) -> None:
+    mock_gemini_client.interactions.create.return_value = SimpleNamespace(
+        output_text=ResearchReport(
+            title="Test title",
+            summary="Test summary",
+            findings=[
+                ResearchFinding(
+                    claim="Test claim",
+                    source_ids=["S1"]
+                ),
+            ],
+            limitations=[]
+        ).model_dump_json()
+    )
+
+    await mock_research_agent.synthesize(
+        model_input="test model input"
+    )
+
+    mock_gemini_client.interactions.create.assert_called_once()
+
+    call_kwargs = mock_gemini_client.interactions.create.call_args.kwargs
+
+    assert call_kwargs["response_format"]["mime_type"] == "application/json"
+    assert call_kwargs["response_format"]["type"] == "text"
