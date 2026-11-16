@@ -17,10 +17,10 @@ def initialize_mocked_setup(test_session_factory, mock_web_search_tool):
     # Setup needed services and mocked return values instead of real external API calls
     mock_research_agent = AsyncMock(spec=ResearchAgent)
 
-    mock_workflow_service = WorkflowService(
+    workflow_service = WorkflowService(
         session_factory=test_session_factory
     )
-    mock_research_service = ResearchService(
+    research_service = ResearchService(
         agent=mock_research_agent,
         search_tool=mock_web_search_tool
     )
@@ -36,7 +36,7 @@ def initialize_mocked_setup(test_session_factory, mock_web_search_tool):
         ]
     )
 
-    return mock_research_agent, mock_workflow_service, mock_research_service
+    return mock_research_agent, workflow_service, research_service
 
 
 async def execute_workflow(
@@ -75,7 +75,7 @@ async def test_complete_successful_workflow(
         test_session_factory,
         mock_web_search_tool
 ):
-    mock_research_agent, mock_workflow_service, mock_research_service = initialize_mocked_setup(
+    mock_research_agent, workflow_service, research_service = initialize_mocked_setup(
         test_session_factory, mock_web_search_tool
     )
 
@@ -115,8 +115,8 @@ async def test_complete_successful_workflow(
     # Workflow execution
     result, _ = await execute_workflow(
         client,
-        mock_workflow_service,
-        mock_research_service
+        workflow_service,
+        research_service
     )
 
     assert result["status"] == WorkflowStatus.COMPLETED
@@ -134,7 +134,7 @@ async def test_incomplete_failed_workflow(
         test_session_factory,
         mock_web_search_tool
 ):
-    mock_research_agent, mock_workflow_service, mock_research_service = initialize_mocked_setup(
+    mock_research_agent, workflow_service, research_service = initialize_mocked_setup(
         test_session_factory, mock_web_search_tool
     )
 
@@ -174,8 +174,8 @@ async def test_incomplete_failed_workflow(
     # Workflow execution
     result, workflow_id = await execute_workflow(
         client,
-        mock_workflow_service,
-        mock_research_service
+        workflow_service,
+        research_service
     )
 
     assert result["status"] == WorkflowStatus.FAILED
@@ -194,7 +194,7 @@ async def test_insufficient_research_evidence(
         test_session_factory,
         mock_web_search_tool
 ):
-    mock_research_agent, mock_workflow_service, mock_research_service = initialize_mocked_setup(
+    mock_research_agent, workflow_service, research_service = initialize_mocked_setup(
         test_session_factory, mock_web_search_tool
     )
 
@@ -213,8 +213,8 @@ async def test_insufficient_research_evidence(
     # Workflow execution
     result, _ = await execute_workflow(
         client,
-        mock_workflow_service,
-        mock_research_service
+        workflow_service,
+        research_service
     )
 
     assert result["status"] == WorkflowStatus.COMPLETED
