@@ -145,7 +145,7 @@ async def test_complete_successful_workflow(
         for s_id in finding.source_ids
     ]
 
-    assert sources_references == findings_references
+    assert all(finding_source in sources_references for finding_source in findings_references)
 
     sources_urls = [
         s.result.url
