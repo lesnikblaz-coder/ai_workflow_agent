@@ -256,11 +256,15 @@ async def test_insufficient_research_evidence(
         research_service
     )
 
-    assert result["status"] == WorkflowStatus.COMPLETED
-
-    ResearchReportWithSources.model_validate_json(result["result"])
-
     mock_research_agent.run.assert_awaited_once_with(
         "Compare FastAPI and Django frameworks. "
         "Which supports asynchronous operations?"
     )
+
+    assert result["status"] == WorkflowStatus.COMPLETED
+
+    persisted_report = ResearchReportWithSources.model_validate_json(result["result"])
+
+    assert persisted_report.report.findings == []
+    assert persisted_report.sources == []
+    assert persisted_report.report.limitations
