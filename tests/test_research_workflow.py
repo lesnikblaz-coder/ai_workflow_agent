@@ -119,14 +119,53 @@ async def test_complete_successful_workflow(
         research_service
     )
 
-    assert result["status"] == WorkflowStatus.COMPLETED
-
-    ResearchReportWithSources.model_validate_json(result["result"])
-
     mock_research_agent.run.assert_awaited_once_with(
         "Compare FastAPI and Django frameworks. "
         "Which supports asynchronous operations?"
     )
+
+    assert result["status"] == WorkflowStatus.COMPLETED
+
+    persisted_report = ResearchReportWithSources.model_validate_json(result["result"])
+
+    assert persisted_report.report.title == "FastAPI and Django async"
+
+    assert len(persisted_report.sources) == 2
+
+    sources_references = [
+        s.source_id
+        for s in persisted_report.sources
+    ]
+
+    assert sources_references == ["S1", "S2"]
+
+    findings_references = [
+        s_id
+        for finding in persisted_report.report.findings
+        for s_id in finding.source_ids
+    ]
+
+    assert sources_references == findings_references
+
+    sources_urls = [
+        s.result.url
+        for s in persisted_report.sources
+    ]
+
+    assert sources_urls == [
+        HttpUrl("https://fastapi.tiangolo.com/"),
+        HttpUrl("https://www.djangoproject.com/")
+    ]
+
+    sources_snippets = [
+        s.result.snippet
+        for s in persisted_report.sources
+    ]
+
+    assert sources_snippets == [
+        "FastAPI supports asynchronous route handlers.",
+        "Django supports asynchronous route handlers."
+    ]
 
 
 async def test_incomplete_failed_workflow(
