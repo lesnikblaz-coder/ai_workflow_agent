@@ -11,6 +11,9 @@ from src.enums import WorkflowStatus
 from src.repositories.workflow_repository import WorkflowRepository
 
 
+BASE_WORKFLOW_ROUTER_URL = "/v1/workflows"
+
+
 async def test_complete_successful_workflow(
         client,
         test_session_factory,
@@ -72,10 +75,8 @@ async def test_complete_successful_workflow(
     )
 
     # Workflow execution
-    base_workflow_router_url = "/v1/workflows"
-
     response_post = await client.post(
-        url=base_workflow_router_url,
+        url=BASE_WORKFLOW_ROUTER_URL,
         json={
             "instruction": "Compare FastAPI and Django frameworks. "
                            "Which supports asynchronous operations?"
@@ -92,7 +93,7 @@ async def test_complete_successful_workflow(
     )
 
     response_get = await client.get(
-        url=base_workflow_router_url + f"/{workflow_id}",
+        url=BASE_WORKFLOW_ROUTER_URL + f"/{workflow_id}",
     )
 
     assert response_get.status_code == 200
@@ -170,10 +171,8 @@ async def test_incomplete_failed_workflow(
     )
 
     # Workflow execution
-    base_workflow_router_url = "/v1/workflows"
-
     response_post = await client.post(
-        url=base_workflow_router_url,
+        url=BASE_WORKFLOW_ROUTER_URL,
         json={
             "instruction": "Compare FastAPI and Django frameworks. "
                            "Which supports asynchronous operations?"
@@ -191,7 +190,7 @@ async def test_incomplete_failed_workflow(
     )
 
     response_get = await client.get(
-        url=base_workflow_router_url + f"/{workflow_id}",
+        url=BASE_WORKFLOW_ROUTER_URL + f"/{workflow_id}",
     )
 
     assert response_get.status_code == 200
@@ -207,3 +206,78 @@ async def test_incomplete_failed_workflow(
         claimed_workflow = await repo.get(workflow_id)
         assert claimed_workflow
         assert claimed_workflow.error_message is not None
+
+
+async def test_insufficient_research_evidence(
+        client,
+        test_session_factory,
+        mock_web_search_tool
+):
+    # Setup needed services and mocked return values instead of real external API calls
+    mock_research_agent = AsyncMock(spec=ResearchAgent)
+
+    mock_workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+    mock_research_service = ResearchService(
+        agent=mock_research_agent,
+        search_tool=mock_web_search_tool
+    )
+
+    mock_research_agent.run.return_value = ResearchPlan(
+        topic="FastAPI vs Django",
+        research_questions=[
+            "How do these frameworks support asynchronous operations?"
+        ],
+        search_queries=[
+            "FastAPI async documentation",
+            "Django async documentation"
+        ]
+    )
+
+    # Mock empty return value from WebSearchTool
+    mock_web_search_tool.search.return_value = []
+
+    mock_research_agent.synthesize.return_value = ResearchReport(
+        title="FastAPI and Django async",
+        summary="Insufficient information was found.",
+        findings=[],
+        limitations=[
+            "No relevant sources were retrieved."
+        ]
+    )
+
+    # Workflow execution
+    response_post = await client.post(
+        url=BASE_WORKFLOW_ROUTER_URL,
+        json={
+            "instruction": "Compare FastAPI and Django frameworks. "
+                           "Which supports asynchronous operations?"
+        }
+    )
+
+    assert response_post.status_code == 202
+
+    workflow_id = response_post.json()["id"]
+
+    await process_one_workflow(
+        workflow_service=mock_workflow_service,
+        research_service=mock_research_service
+    )
+
+    response_get = await client.get(
+        url=BASE_WORKFLOW_ROUTER_URL + f"/{workflow_id}",
+    )
+
+    assert response_get.status_code == 200
+
+    result = response_get.json()
+
+    assert result["status"] == WorkflowStatus.COMPLETED
+
+    ResearchReportWithSources.model_validate_json(result["result"])
+
+    mock_research_agent.run.assert_awaited_once_with(
+        "Compare FastAPI and Django frameworks. "
+        "Which supports asynchronous operations?"
+    )
