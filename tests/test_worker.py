@@ -9,6 +9,7 @@ from src.services.research_service import ResearchService
 from tests.conftest import TestAsyncSessionLocal
 from src.db.models.workflow import Workflow
 from src.worker.main import process_one_workflow
+from src.repositories.workflow_repository import WorkflowRepository
 
 
 async def test_two_workers_cannot_claim_same_workflow():
@@ -127,3 +128,59 @@ async def test_worker_exception_sets_workflow_status_to_failed(
     db_result = await workflow_service.get(workflow_id)
 
     assert db_result.status == WorkflowStatus.FAILED
+
+
+async def test_running_workflow_is_not_reclaimed(
+        test_session_factory
+):
+    """
+    Running worker crashes -> current workflow status running is not reclaimed.
+    """
+
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    # Create a workflow
+    workflow = await workflow_service.create(
+        instruction="Test instruction"
+    )
+
+    # Check saved workflow
+    db_workflow = await workflow_service.get(
+        workflow_id=workflow.id
+    )
+
+    assert db_workflow
+    assert db_workflow.status == WorkflowStatus.QUEUED
+    assert db_workflow.result is None
+
+    # First claim_next() correctly claims the queued workflow
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(
+            session=session
+        )
+
+        # Assert same workflow is now updated: status=RUNNING, started_at is populated
+        claimed_db_workflow = await repo.get(
+            workflow_id=claimed_workflow.id
+        )
+
+        assert claimed_db_workflow
+        assert claimed_db_workflow.status == WorkflowStatus.RUNNING
+        assert claimed_db_workflow.result is None
+        assert claimed_db_workflow.started_at is not None
+
+    # A subsequent claim_next() does not reclaim that workflow
+    # The workflow remains RUNNING
+    subsequent_claimed_workflow = await workflow_service.claim_next()
+
+    assert not subsequent_claimed_workflow
+
+    workflow =  await workflow_service.get(workflow.id)
+
+    assert workflow.status == WorkflowStatus.RUNNING
