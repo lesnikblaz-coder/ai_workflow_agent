@@ -10,15 +10,10 @@ from src.worker.main import process_one_workflow
 from src.enums import WorkflowStatus
 from src.repositories.workflow_repository import WorkflowRepository
 
-
 BASE_WORKFLOW_ROUTER_URL = "/v1/workflows"
 
 
-async def test_complete_successful_workflow(
-        client,
-        test_session_factory,
-        mock_web_search_tool
-):
+def initialize_mocked_setup(test_session_factory, mock_web_search_tool):
     # Setup needed services and mocked return values instead of real external API calls
     mock_research_agent = AsyncMock(spec=ResearchAgent)
 
@@ -39,6 +34,49 @@ async def test_complete_successful_workflow(
             "FastAPI async documentation",
             "Django async documentation"
         ]
+    )
+
+    return mock_research_agent, mock_workflow_service, mock_research_service
+
+
+async def execute_workflow(
+        client,
+        mock_workflow_service,
+        mock_research_service
+):
+    response_post = await client.post(
+        url=BASE_WORKFLOW_ROUTER_URL,
+        json={
+            "instruction": "Compare FastAPI and Django frameworks. "
+                           "Which supports asynchronous operations?"
+        }
+    )
+
+    assert response_post.status_code == 202
+
+    workflow_id = response_post.json()["id"]
+
+    await process_one_workflow(
+        workflow_service=mock_workflow_service,
+        research_service=mock_research_service
+    )
+
+    response_get = await client.get(
+        url=BASE_WORKFLOW_ROUTER_URL + f"/{workflow_id}",
+    )
+
+    assert response_get.status_code == 200
+
+    return response_get.json(), workflow_id
+
+
+async def test_complete_successful_workflow(
+        client,
+        test_session_factory,
+        mock_web_search_tool
+):
+    mock_research_agent, mock_workflow_service, mock_research_service = initialize_mocked_setup(
+        test_session_factory, mock_web_search_tool
     )
 
     mock_web_search_tool.search.side_effect = [
@@ -75,30 +113,11 @@ async def test_complete_successful_workflow(
     )
 
     # Workflow execution
-    response_post = await client.post(
-        url=BASE_WORKFLOW_ROUTER_URL,
-        json={
-            "instruction": "Compare FastAPI and Django frameworks. "
-                           "Which supports asynchronous operations?"
-        }
+    result, _ = await execute_workflow(
+        client,
+        mock_workflow_service,
+        mock_research_service
     )
-
-    assert response_post.status_code == 202
-
-    workflow_id = response_post.json()["id"]
-
-    await process_one_workflow(
-        workflow_service=mock_workflow_service,
-        research_service=mock_research_service
-    )
-
-    response_get = await client.get(
-        url=BASE_WORKFLOW_ROUTER_URL + f"/{workflow_id}",
-    )
-
-    assert response_get.status_code == 200
-
-    result = response_get.json()
 
     assert result["status"] == WorkflowStatus.COMPLETED
 
@@ -115,26 +134,8 @@ async def test_incomplete_failed_workflow(
         test_session_factory,
         mock_web_search_tool
 ):
-    # Setup needed services and mocked return values instead of real external API calls
-    mock_research_agent = AsyncMock(spec=ResearchAgent)
-
-    mock_workflow_service = WorkflowService(
-        session_factory=test_session_factory
-    )
-    mock_research_service = ResearchService(
-        agent=mock_research_agent,
-        search_tool=mock_web_search_tool
-    )
-
-    mock_research_agent.run.return_value = ResearchPlan(
-        topic="FastAPI vs Django",
-        research_questions=[
-            "How do these frameworks support asynchronous operations?"
-        ],
-        search_queries=[
-            "FastAPI async documentation",
-            "Django async documentation"
-        ]
+    mock_research_agent, mock_workflow_service, mock_research_service = initialize_mocked_setup(
+        test_session_factory, mock_web_search_tool
     )
 
     mock_web_search_tool.search.side_effect = [
@@ -171,31 +172,11 @@ async def test_incomplete_failed_workflow(
     )
 
     # Workflow execution
-    response_post = await client.post(
-        url=BASE_WORKFLOW_ROUTER_URL,
-        json={
-            "instruction": "Compare FastAPI and Django frameworks. "
-                           "Which supports asynchronous operations?"
-        }
+    result, workflow_id = await execute_workflow(
+        client,
+        mock_workflow_service,
+        mock_research_service
     )
-
-    assert response_post.status_code == 202
-
-    workflow_id = response_post.json()["id"]
-
-    # Should produce a FAILED WORKFLOW due to invalid LLM citation above (S999)
-    await process_one_workflow(
-        workflow_service=mock_workflow_service,
-        research_service=mock_research_service
-    )
-
-    response_get = await client.get(
-        url=BASE_WORKFLOW_ROUTER_URL + f"/{workflow_id}",
-    )
-
-    assert response_get.status_code == 200
-
-    result = response_get.json()
 
     assert result["status"] == WorkflowStatus.FAILED
     assert result["result"] is None
@@ -213,26 +194,8 @@ async def test_insufficient_research_evidence(
         test_session_factory,
         mock_web_search_tool
 ):
-    # Setup needed services and mocked return values instead of real external API calls
-    mock_research_agent = AsyncMock(spec=ResearchAgent)
-
-    mock_workflow_service = WorkflowService(
-        session_factory=test_session_factory
-    )
-    mock_research_service = ResearchService(
-        agent=mock_research_agent,
-        search_tool=mock_web_search_tool
-    )
-
-    mock_research_agent.run.return_value = ResearchPlan(
-        topic="FastAPI vs Django",
-        research_questions=[
-            "How do these frameworks support asynchronous operations?"
-        ],
-        search_queries=[
-            "FastAPI async documentation",
-            "Django async documentation"
-        ]
+    mock_research_agent, mock_workflow_service, mock_research_service = initialize_mocked_setup(
+        test_session_factory, mock_web_search_tool
     )
 
     # Mock empty return value from WebSearchTool
@@ -248,30 +211,11 @@ async def test_insufficient_research_evidence(
     )
 
     # Workflow execution
-    response_post = await client.post(
-        url=BASE_WORKFLOW_ROUTER_URL,
-        json={
-            "instruction": "Compare FastAPI and Django frameworks. "
-                           "Which supports asynchronous operations?"
-        }
+    result, _ = await execute_workflow(
+        client,
+        mock_workflow_service,
+        mock_research_service
     )
-
-    assert response_post.status_code == 202
-
-    workflow_id = response_post.json()["id"]
-
-    await process_one_workflow(
-        workflow_service=mock_workflow_service,
-        research_service=mock_research_service
-    )
-
-    response_get = await client.get(
-        url=BASE_WORKFLOW_ROUTER_URL + f"/{workflow_id}",
-    )
-
-    assert response_get.status_code == 200
-
-    result = response_get.json()
 
     assert result["status"] == WorkflowStatus.COMPLETED
 
