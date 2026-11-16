@@ -6,7 +6,13 @@ def validate_citations(
         llm_report: ResearchReport,
         provided_sources: list[ResearchSource]
 ) -> None:
-    """Validates/matches source id's mentioned in the LLM response versus the actual provided source's id's."""
+    """
+    Validates source citations in research report findings.
+
+    - Findings must reference at least one valid source ID.
+    - All referenced source IDs must exist in the provided sources.
+    - Empty findings lists are allowed.
+    """
 
     valid_source_ids = {
         source.source_id
@@ -18,5 +24,5 @@ def validate_citations(
                 set(finding.source_ids) - valid_source_ids
         )
 
-        if unknown_ids:
+        if unknown_ids or not finding.source_ids:
             raise CitationValidationError()
