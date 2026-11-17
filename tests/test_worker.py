@@ -2,6 +2,7 @@ import asyncio
 
 from sqlalchemy import delete
 from types import SimpleNamespace
+from datetime import timedelta
 
 from src.enums import WorkflowStatus
 from src.services.workflow_service import WorkflowService
@@ -238,8 +239,19 @@ async def test_claiming_workflow_populates_lease(
         assert db_claimed_workflow is not None
         assert db_claimed_workflow.id == workflow.id
         assert db_claimed_workflow.status == WorkflowStatus.RUNNING
+        assert db_claimed_workflow.started_at is not None
         assert db_claimed_workflow.lease_expires_at is not None
-        assert db_claimed_workflow.lease_expires_at > db_claimed_workflow.started_at
+
+        actual_duration = (
+                db_claimed_workflow.lease_expires_at
+                - db_claimed_workflow.started_at
+        )
+
+        expected_duration = timedelta(minutes=2)
+
+        tolerance = timedelta(seconds=5)
+
+        assert abs(actual_duration - expected_duration) <= tolerance
 
 
 async def test_completed_workflow_clears_active_lease(
