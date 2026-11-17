@@ -5,6 +5,7 @@ from google import genai
 
 from src.logging_config import logger
 from src.db.base import AsyncSessionLocal, engine
+from src.schemas.workflow import ClaimedWorkflow
 from src.services.workflow_service import WorkflowService
 from src.services.research_service import ResearchService
 from src.agents.research_agent import ResearchAgent
@@ -16,7 +17,7 @@ async def process_one_workflow(
         workflow_service: WorkflowService,
         research_service: ResearchService
 ) -> bool:
-    workflow = await workflow_service.claim_next()
+    workflow: ClaimedWorkflow | None = await workflow_service.claim_next()
 
     if workflow is None:
         return False
@@ -28,7 +29,8 @@ async def process_one_workflow(
 
         await workflow_service.complete(
             workflow_id=workflow.id,
-            result=report.model_dump_json()
+            result=report.model_dump_json(),
+            claim_token=workflow.claim_token
         )
 
         logger.info("Completed workflow %s", workflow.id)
