@@ -36,3 +36,6 @@ class Workflow(Base):
 
     # workers workflow lease expiry
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # workflow ownership with claim token
+    claim_token: Mapped[UUID | None] = mapped_column(SQL_UUID(as_uuid=True), nullable=True)
