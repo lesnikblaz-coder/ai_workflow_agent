@@ -208,3 +208,35 @@ async def test_newly_created_workflow_has_no_lease_expiration(
         assert db_workflow
         assert db_workflow.status == WorkflowStatus.QUEUED
         assert db_workflow.lease_expires_at is None
+
+
+async def test_claiming_workflow_populates_lease(
+        test_session_factory
+) -> None:
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create(
+        "test"
+    )
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(
+            session=session
+        )
+
+        db_claimed_workflow = await repo.get(claimed_workflow.id)
+
+        assert db_claimed_workflow is not None
+        assert db_claimed_workflow.id == workflow.id
+        assert db_claimed_workflow.status == WorkflowStatus.RUNNING
+        assert db_claimed_workflow.lease_expires_at is not None
+        assert db_claimed_workflow.lease_expires_at > db_claimed_workflow.started_at
