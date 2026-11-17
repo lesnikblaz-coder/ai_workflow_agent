@@ -77,7 +77,9 @@ async def test_verify_result_not_overwritten():
         session_factory=TestAsyncSessionLocal
     )
 
-    await service.claim_next()
+    claimed_workflow = await service.claim_next()
+
+    assert claimed_workflow
 
     # complete the workflow
     service = WorkflowService(
@@ -86,7 +88,8 @@ async def test_verify_result_not_overwritten():
 
     await service.complete(
         workflow_id=workflow_id,
-        result="Research completed for: Compare FastAPI and Django"
+        result="Research completed for: Compare FastAPI and Django",
+        claim_token=claimed_workflow.claim_token
     )
 
     # assert workflow correctly updated
@@ -274,7 +277,8 @@ async def test_completed_workflow_clears_active_lease(
 
     await workflow_service.complete(
         workflow_id=workflow.id,
-        result="completed"
+        result="completed",
+        claim_token=claimed_workflow.claim_token
     )
 
     async with test_session_factory.begin() as session:
@@ -409,7 +413,8 @@ async def test_completed_workflow_clears_claim_token(
 
     await workflow_service.complete(
         workflow_id=workflow.id,
-        result="completed"
+        result="completed",
+        claim_token=claimed_workflow.claim_token
     )
 
     async with test_session_factory.begin() as session:
