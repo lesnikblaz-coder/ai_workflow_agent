@@ -385,3 +385,79 @@ async def test_claiming_workflow_populates_claim_token(
         assert db_workflow
         assert db_workflow.status == WorkflowStatus.RUNNING
         assert db_workflow.claim_token is not None
+
+
+async def test_completed_workflow_clears_claim_token(
+        test_session_factory
+) -> None:
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create(
+        "test"
+    )
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    await workflow_service.complete(
+        workflow_id=workflow.id,
+        result="completed"
+    )
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(
+            session=session
+        )
+
+        db_workflow = await repo.get(
+            workflow.id
+        )
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.COMPLETED
+        assert db_workflow.claim_token is None
+
+
+async def test_failed_workflow_clears_claim_token(
+        test_session_factory
+) -> None:
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create(
+        "test"
+    )
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    await workflow_service.fail(
+        workflow_id=workflow.id,
+        error_msg="failed"
+    )
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(
+            session=session
+        )
+
+        db_workflow = await repo.get(
+            workflow.id
+        )
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.FAILED
+        assert db_workflow.claim_token is None
