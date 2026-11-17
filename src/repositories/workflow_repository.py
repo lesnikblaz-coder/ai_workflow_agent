@@ -1,4 +1,4 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone, timedelta
@@ -46,9 +46,13 @@ class WorkflowRepository:
         workflow.started_at = datetime.now(timezone.utc)
         workflow.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
 
+        # Generate a claim token
+        claim_token = uuid4()
+
         return ClaimedWorkflow(
             id=workflow.id,
-            instruction=workflow.instruction
+            instruction=workflow.instruction,
+            claim_token=claim_token
         )
 
     async def workflow_completion(self, workflow_id: UUID, result: str) -> Workflow | None:
@@ -64,6 +68,7 @@ class WorkflowRepository:
         workflow.result = result
         workflow.finished_at = datetime.now(timezone.utc)
         workflow.lease_expires_at = None
+        workflow.claim_token = None
 
         return workflow
 
@@ -80,6 +85,7 @@ class WorkflowRepository:
         workflow.error_message = error_msg
         workflow.finished_at = datetime.now(timezone.utc)
         workflow.lease_expires_at = None
+        workflow.claim_token = None
 
         return workflow
 
