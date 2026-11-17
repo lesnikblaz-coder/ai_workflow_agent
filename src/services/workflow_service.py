@@ -47,18 +47,22 @@ class WorkflowService:
 
             return await repo.claim_next()
 
-    async def complete(self, workflow_id: UUID, result: str):
+    async def complete(self, workflow_id: UUID, result: str, claim_token: UUID) -> None:
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
-            updated = await repo.workflow_completion(workflow_id, result)
+            updated = await repo.workflow_completion(
+                workflow_id=workflow_id,
+                result=result,
+                claim_token=claim_token
+            )
 
             if updated is None:
                 raise RuntimeError(
                     f"Error: Cannot update completed workflow {workflow_id}"
                 )
 
-    async def fail(self, workflow_id: UUID, error_msg: str):
+    async def fail(self, workflow_id: UUID, error_msg: str) -> None:
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
