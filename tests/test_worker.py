@@ -385,6 +385,7 @@ async def test_claiming_workflow_populates_claim_token(
         assert db_workflow
         assert db_workflow.status == WorkflowStatus.RUNNING
         assert db_workflow.claim_token is not None
+        assert db_workflow.claim_token == claimed_workflow.claim_token
 
 
 async def test_completed_workflow_clears_claim_token(
