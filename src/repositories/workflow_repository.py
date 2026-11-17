@@ -46,8 +46,9 @@ class WorkflowRepository:
         workflow.started_at = datetime.now(timezone.utc)
         workflow.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
 
-        # Generate a claim token
+        # Generate and assign a claim token
         claim_token = uuid4()
+        workflow.claim_token = claim_token
 
         return ClaimedWorkflow(
             id=workflow.id,
