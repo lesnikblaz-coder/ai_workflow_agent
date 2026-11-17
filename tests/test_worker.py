@@ -326,3 +326,30 @@ async def test_failed_workflow_clears_active_lease(
         assert db_workflow
         assert db_workflow.status == WorkflowStatus.FAILED
         assert db_workflow.lease_expires_at is None
+
+
+async def test_newly_created_workflow_has_no_claim_token(
+        test_session_factory
+) -> None:
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create(
+        "test"
+    )
+
+    assert workflow is not None
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(
+            session=session
+        )
+
+        db_workflow = await repo.get(
+            workflow.id
+        )
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.QUEUED
+        assert db_workflow.claim_token is None
