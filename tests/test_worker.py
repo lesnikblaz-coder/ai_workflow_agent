@@ -159,6 +159,7 @@ async def test_running_workflow_is_not_reclaimed(
     claimed_workflow = await workflow_service.claim_next()
 
     assert claimed_workflow
+    assert claimed_workflow.id == workflow.id
 
     async with test_session_factory.begin() as session:
         repo = WorkflowRepository(
@@ -179,8 +180,31 @@ async def test_running_workflow_is_not_reclaimed(
     # The workflow remains RUNNING
     subsequent_claimed_workflow = await workflow_service.claim_next()
 
-    assert not subsequent_claimed_workflow
+    assert subsequent_claimed_workflow is None
 
     workflow =  await workflow_service.get(workflow.id)
 
     assert workflow.status == WorkflowStatus.RUNNING
+
+
+async def test_newly_created_workflow_has_no_lease_expiration(
+        test_session_factory
+):
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create(
+        "Test"
+    )
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(
+            session=session
+        )
+
+        db_workflow = await repo.get(workflow.id)
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.QUEUED
+        assert db_workflow.lease_expires_at is None
