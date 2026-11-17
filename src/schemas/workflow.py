@@ -20,3 +20,4 @@ class WorkflowGetResponse(BaseModel):
 class ClaimedWorkflow(BaseModel):
     id: UUID
     instruction: str
+    claim_token: UUID
