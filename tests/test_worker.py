@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from datetime import timedelta
 
 from src.enums import WorkflowStatus
+from src.exceptions.custom import WorkflowOwnershipLostError
 from src.services.workflow_service import WorkflowService
 from src.services.research_service import ResearchService
 from tests.conftest import TestAsyncSessionLocal
@@ -528,7 +529,7 @@ async def test_incorrect_claim_token_rejects_workflow_completion(
     assert claimed_workflow.id == workflow.id
     assert claimed_workflow.claim_token is not None
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(WorkflowOwnershipLostError):
         await workflow_service.complete(
             workflow_id=workflow.id,
             result="completed",
@@ -559,7 +560,7 @@ async def test_correct_claim_token_rejects_completed_workflow_completion(
         claim_token=claimed_workflow.claim_token
     )
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(WorkflowOwnershipLostError):
         await workflow_service.complete(
             workflow_id=workflow.id,
             result="completed",
@@ -584,7 +585,7 @@ async def test_rejected_completion_keeps_existing_data_unchanged(
     assert claimed_workflow.id == workflow.id
     assert claimed_workflow.claim_token is not None
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(WorkflowOwnershipLostError):
         await workflow_service.complete(
             workflow_id=workflow.id,
             result="completed",
