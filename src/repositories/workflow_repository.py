@@ -57,7 +57,8 @@ class WorkflowRepository:
         )
 
     async def workflow_completion(self, workflow_id: UUID, result: str, claim_token: UUID) -> Workflow | None:
-        """Performs an atomic conditional update (completion).
+        """
+        Performs an atomic conditional update (completion).
         :param workflow_id: UUID
         :param result: str
         :param claim_token: UUID
@@ -86,22 +87,34 @@ class WorkflowRepository:
         return result.scalar_one_or_none()
 
 
-    async def workflow_fail(self, workflow_id: UUID, error_msg: str) -> Workflow | None:
-        workflow = await self._get_workflow_by_id(workflow_id)
+    async def workflow_fail(self, workflow_id: UUID, error_msg: str, claim_token: UUID) -> Workflow | None:
+        """
+        Performs an atomic conditional update (failure).
+        :param workflow_id: UUID
+        :param error_msg: str
+        :param claim_token: UUID
+        :return: updated Workflow | None
+        """
 
-        if (
-                workflow is None
-                or workflow.status != WorkflowStatus.RUNNING
-        ):
-            return None
+        stmt = (
+            update(Workflow)
+            .where(
+                Workflow.id == workflow_id,
+                Workflow.status == WorkflowStatus.RUNNING,
+                Workflow.claim_token == claim_token
+            )
+            .values(
+                status=WorkflowStatus.FAILED,
+                error_message=error_msg,
+                finished_at=datetime.now(timezone.utc),
+                lease_expires_at=None,
+                claim_token=None
+            )
+        )
 
-        workflow.status = WorkflowStatus.FAILED
-        workflow.error_message = error_msg
-        workflow.finished_at = datetime.now(timezone.utc)
-        workflow.lease_expires_at = None
-        workflow.claim_token = None
+        result = await self.session.execute(stmt)
 
-        return workflow
+        return result.scalar_one_or_none()
 
 
     async def _get_workflow_by_id(self, workflow_id: UUID) -> Workflow | None:
