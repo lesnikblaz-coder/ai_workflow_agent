@@ -317,7 +317,8 @@ async def test_failed_workflow_clears_active_lease(
 
     await workflow_service.fail(
         workflow_id=workflow.id,
-        error_msg="failed"
+        error_msg="failed",
+        claim_token=claimed_workflow.claim_token
     )
 
     async with test_session_factory.begin() as session:
@@ -454,7 +455,8 @@ async def test_failed_workflow_clears_claim_token(
 
     await workflow_service.fail(
         workflow_id=workflow.id,
-        error_msg="failed"
+        error_msg="failed",
+        claim_token=claimed_workflow.claim_token
     )
 
     async with test_session_factory.begin() as session:
