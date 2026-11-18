@@ -150,6 +150,7 @@ class WorkflowRepository:
                         datetime.now(timezone.utc) + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
                 )
             )
+            .returning(Workflow)
         )
 
         result = await self.session.execute(stmt)
