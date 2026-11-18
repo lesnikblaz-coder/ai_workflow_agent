@@ -11,6 +11,7 @@ from src.services.research_service import ResearchService
 from src.agents.research_agent import ResearchAgent
 from src.config import settings
 from src.tools.web_search import WebSearchTool
+from src.exceptions.custom import WorkflowOwnershipLostError
 
 
 async def process_one_workflow(
@@ -35,16 +36,33 @@ async def process_one_workflow(
 
         logger.info("Completed workflow %s", workflow.id)
 
+    except WorkflowOwnershipLostError:
+        logger.warning(
+            "Workflow %s ownership lost | claim_token=%s",
+            workflow.id,
+            workflow.claim_token
+        )
+
+        return True
+
     except Exception:
         logger.exception("Workflow %s failed", workflow.id)
 
         error_msg = f"Workflow {workflow.id} failed."
 
-        await workflow_service.fail(
-            workflow_id=workflow.id,
-            error_msg=error_msg,
-            claim_token=workflow.claim_token
-        )
+        try:
+            await workflow_service.fail(
+                workflow_id=workflow.id,
+                error_msg=error_msg,
+                claim_token=workflow.claim_token
+            )
+
+        except WorkflowOwnershipLostError:
+            logger.warning(
+                "Workflow %s ownership lost | claim_token=%s",
+                workflow.id,
+                workflow.claim_token
+            )
 
         return True
 
