@@ -742,3 +742,47 @@ async def test_stale_token_cannot_fail_workflow_owned_by_another_worker(
         assert db_workflow.status == WorkflowStatus.RUNNING
         assert db_workflow.claim_token == fresh_claim_token
         assert db_workflow.error_message is None
+
+
+async def test_valid_token_active_lease_successful_extension(
+        test_session_factory
+) -> None:
+    """Valid claim token with an active lease successfully extends lease expiry."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        db_workflow = await repo.get(workflow.id)
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.RUNNING
+        assert db_workflow.lease_expires_at is not None
+
+    await workflow_service.renew_lease(
+        workflow_id=workflow.id,
+        claim_token=claimed_workflow.claim_token
+    )
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        renewed_lease_db_workflow = await repo.get(workflow.id)
+
+        assert renewed_lease_db_workflow
+        assert renewed_lease_db_workflow.status == WorkflowStatus.RUNNING
+        assert renewed_lease_db_workflow.lease_expires_at is not None
+
+        assert renewed_lease_db_workflow.lease_expires_at > db_workflow.lease_expires_at
