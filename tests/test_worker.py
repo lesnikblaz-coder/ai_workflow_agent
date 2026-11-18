@@ -730,3 +730,15 @@ async def test_stale_token_cannot_fail_workflow_owned_by_another_worker(
             error_msg="workflow failed",
             claim_token=stale_claim_token
         )
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(
+            session=session
+        )
+
+        db_workflow = await repo.get(workflow.id)
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.RUNNING
+        assert db_workflow.claim_token == fresh_claim_token
+        assert db_workflow.error_message is None
