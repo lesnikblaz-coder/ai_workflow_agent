@@ -63,13 +63,17 @@ class WorkflowService:
                     workflow_id=workflow_id
                 )
 
-    async def fail(self, workflow_id: UUID, error_msg: str) -> None:
+    async def fail(self, workflow_id: UUID, error_msg: str, claim_token: UUID) -> None:
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
-            updated = await repo.workflow_fail(workflow_id, error_msg)
+            updated = await repo.workflow_fail(
+                workflow_id=workflow_id,
+                error_msg=error_msg,
+                claim_token=claim_token
+            )
 
             if updated is None:
-                raise RuntimeError(
-                    f"Error: Cannot update failed workflow {workflow_id}"
+                raise WorkflowOwnershipLostError(
+                    workflow_id=workflow_id
                 )
