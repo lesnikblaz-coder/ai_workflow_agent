@@ -40,7 +40,11 @@ async def process_one_workflow(
 
         error_msg = f"Workflow {workflow.id} failed."
 
-        await workflow_service.fail(workflow.id, error_msg)
+        await workflow_service.fail(
+            workflow_id=workflow.id,
+            error_msg=error_msg,
+            claim_token=workflow.claim_token
+        )
 
         return True
 
