@@ -28,3 +28,13 @@ class WorkflowOwnershipLostError(AppException):
         )
 
         super().__init__(detail)
+
+
+class LeaseRenewalRejectedError(AppException):
+    def __init__(self, workflow_id: UUID):
+        detail = (
+            f"Workflow {workflow_id} lease renewal rejected: "
+            "mismatch in either state, claim ownership or the lease is already expired."
+        )
+
+        super().__init__(detail)
