@@ -6,6 +6,7 @@ from src.repositories.workflow_repository import WorkflowRepository
 from src.db.models.workflow import Workflow
 from src.enums import WorkflowStatus
 from src.schemas.workflow import WorkflowPostResponse, WorkflowGetResponse, ClaimedWorkflow
+from src.exceptions.custom import WorkflowOwnershipLostError
 
 
 class WorkflowService:
@@ -58,8 +59,8 @@ class WorkflowService:
             )
 
             if updated is None:
-                raise RuntimeError(
-                    f"Error: Cannot update completed workflow {workflow_id}"
+                raise WorkflowOwnershipLostError(
+                    workflow_id=workflow_id
                 )
 
     async def fail(self, workflow_id: UUID, error_msg: str) -> None:
