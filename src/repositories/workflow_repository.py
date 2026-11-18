@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from src.db.models.workflow import Workflow
 from src.schemas.workflow import ClaimedWorkflow
 from src.enums import WorkflowStatus
+from src.config import settings
 
 
 class WorkflowRepository:
@@ -44,7 +45,7 @@ class WorkflowRepository:
 
         workflow.status = WorkflowStatus.RUNNING
         workflow.started_at = datetime.now(timezone.utc)
-        workflow.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+        workflow.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
 
         # Generate and assign a claim token (changes each execution attempt)
         claim_token = uuid4()
@@ -86,7 +87,6 @@ class WorkflowRepository:
 
         return result.scalar_one_or_none()
 
-
     async def workflow_fail(self, workflow_id: UUID, error_msg: str, claim_token: UUID) -> Workflow | None:
         """
         Performs an atomic conditional update (failure).
@@ -117,7 +117,6 @@ class WorkflowRepository:
 
         return result.scalar_one_or_none()
 
-
     async def _get_workflow_by_id(self, workflow_id: UUID) -> Workflow | None:
         stmt = (
             select(Workflow)
@@ -129,3 +128,30 @@ class WorkflowRepository:
         workflow: Workflow | None = result.scalar_one_or_none()
 
         return workflow
+
+    async def renew_lease(self, workflow_id: UUID, claim_token: UUID) -> Workflow | None:
+        """
+        Valid heartbeat operation extends the lease expiry timer.
+        :param workflow_id:
+        :param claim_token:
+        :return: updated Workflow | None
+        """
+
+        stmt = (
+            update(Workflow)
+            .where(
+                Workflow.id == workflow_id,
+                Workflow.claim_token == claim_token,
+                Workflow.status == WorkflowStatus.RUNNING,
+                Workflow.lease_expires_at > Workflow.started_at
+            )
+            .values(
+                lease_expires_at=(
+                        datetime.now(timezone.utc) + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
+                )
+            )
+        )
+
+        result = await self.session.execute(stmt)
+
+        return result.scalar_one_or_none()
