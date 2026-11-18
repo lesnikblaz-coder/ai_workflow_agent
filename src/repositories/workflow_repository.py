@@ -110,6 +110,7 @@ class WorkflowRepository:
                 lease_expires_at=None,
                 claim_token=None
             )
+            .returning(Workflow)
         )
 
         result = await self.session.execute(stmt)
