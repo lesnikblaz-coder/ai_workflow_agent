@@ -6,7 +6,7 @@ from src.repositories.workflow_repository import WorkflowRepository
 from src.db.models.workflow import Workflow
 from src.enums import WorkflowStatus
 from src.schemas.workflow import WorkflowPostResponse, WorkflowGetResponse, ClaimedWorkflow
-from src.exceptions.custom import WorkflowOwnershipLostError
+from src.exceptions.custom import WorkflowOwnershipLostError, LeaseRenewalRejectedError
 
 
 class WorkflowService:
@@ -52,13 +52,13 @@ class WorkflowService:
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
-            updated = await repo.workflow_completion(
+            workflow = await repo.workflow_completion(
                 workflow_id=workflow_id,
                 result=result,
                 claim_token=claim_token
             )
 
-            if updated is None:
+            if workflow is None:
                 raise WorkflowOwnershipLostError(
                     workflow_id=workflow_id
                 )
@@ -67,13 +67,27 @@ class WorkflowService:
         async with self.session_factory.begin() as session:
             repo = WorkflowRepository(session)
 
-            updated = await repo.workflow_fail(
+            workflow = await repo.workflow_fail(
                 workflow_id=workflow_id,
                 error_msg=error_msg,
                 claim_token=claim_token
             )
 
-            if updated is None:
+            if workflow is None:
                 raise WorkflowOwnershipLostError(
+                    workflow_id=workflow_id
+                )
+
+    async def renew_lease(self, workflow_id: UUID, claim_token: UUID) -> None:
+        async with self.session_factory.begin() as session:
+            repo = WorkflowRepository(session)
+
+            workflow = await repo.renew_lease(
+                workflow_id=workflow_id,
+                claim_token=claim_token
+            )
+
+            if not workflow:
+                raise LeaseRenewalRejectedError(
                     workflow_id=workflow_id
                 )
