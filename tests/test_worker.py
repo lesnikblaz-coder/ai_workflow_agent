@@ -2,7 +2,7 @@ import asyncio
 import pytest
 
 from uuid import uuid4
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from types import SimpleNamespace
 from datetime import timedelta
 
@@ -691,3 +691,42 @@ async def test_incorrect_token_failure_rejected_db_unchanged(
         assert db_workflow.id == claimed_workflow.id == workflow.id
         assert db_workflow.status == WorkflowStatus.RUNNING
         assert db_workflow.error_message is None
+
+
+async def test_stale_token_cannot_fail_workflow_owned_by_another_worker(
+        test_session_factory
+) -> None:
+    """Ensure stale/old claim token cannot fail a workflow owned by another worker."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    # Simulate ownership changing
+    stale_claim_token = claimed_workflow.claim_token
+    fresh_claim_token = uuid4()
+
+    async with test_session_factory.begin() as session:
+        stmt = (
+            update(Workflow)
+            .where(Workflow.id == workflow.id)
+            .values(claim_token=fresh_claim_token)
+        )
+
+        await session.execute(stmt)
+
+    with pytest.raises(WorkflowOwnershipLostError):
+        await workflow_service.fail(
+            workflow_id=workflow.id,
+            error_msg="workflow failed",
+            claim_token=stale_claim_token
+        )
