@@ -143,7 +143,7 @@ class WorkflowRepository:
                 Workflow.id == workflow_id,
                 Workflow.claim_token == claim_token,
                 Workflow.status == WorkflowStatus.RUNNING,
-                Workflow.lease_expires_at > Workflow.started_at
+                Workflow.lease_expires_at > datetime.now(timezone.utc)
             )
             .values(
                 lease_expires_at=(
