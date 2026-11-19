@@ -1,5 +1,5 @@
 from uuid import UUID, uuid4
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func, cast, Interval
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone, timedelta
 
@@ -43,9 +43,11 @@ class WorkflowRepository:
         if workflow is None:
             return None
 
+        db_now = func.statement_timestamp()
+
         workflow.status = WorkflowStatus.RUNNING
-        workflow.started_at = datetime.now(timezone.utc)
-        workflow.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
+        workflow.started_at = db_now
+        workflow.lease_expires_at = db_now + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
 
         # Generate and assign a claim token (changes each execution attempt)
         claim_token = uuid4()
@@ -66,6 +68,8 @@ class WorkflowRepository:
         :return: updated Workflow | None
         """
 
+        db_now = func.statement_timestamp()
+
         stmt = (
             update(Workflow)
             .where(
@@ -76,7 +80,7 @@ class WorkflowRepository:
             .values(
                 status=WorkflowStatus.COMPLETED,
                 result=result,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=db_now,
                 lease_expires_at=None,
                 claim_token=None
             )
@@ -96,6 +100,8 @@ class WorkflowRepository:
         :return: updated Workflow | None
         """
 
+        db_now = func.statement_timestamp()
+
         stmt = (
             update(Workflow)
             .where(
@@ -106,7 +112,7 @@ class WorkflowRepository:
             .values(
                 status=WorkflowStatus.FAILED,
                 error_message=error_msg,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=db_now,
                 lease_expires_at=None,
                 claim_token=None
             )
@@ -137,6 +143,8 @@ class WorkflowRepository:
         :return: updated Workflow | None
         """
 
+        db_now = func.statement_timestamp()
+
         stmt = (
             update(Workflow)
             .where(
@@ -147,7 +155,7 @@ class WorkflowRepository:
             )
             .values(
                 lease_expires_at=(
-                        datetime.now(timezone.utc) + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
+                        db_now + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
                 )
             )
             .returning(Workflow)
