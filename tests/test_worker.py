@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from datetime import timedelta
 
 from src.enums import WorkflowStatus
-from src.exceptions.custom import WorkflowOwnershipLostError
+from src.exceptions.custom import WorkflowOwnershipLostError, LeaseRenewalRejectedError
 from src.services.workflow_service import WorkflowService
 from src.services.research_service import ResearchService
 from tests.conftest import TestAsyncSessionLocal
@@ -786,3 +786,49 @@ async def test_valid_token_active_lease_successful_extension(
         assert renewed_lease_db_workflow.lease_expires_at is not None
 
         assert renewed_lease_db_workflow.lease_expires_at > db_workflow.lease_expires_at
+
+
+async def test_incorrect_token_rejects_lease_extension(
+        test_session_factory
+) -> None:
+    """Invalid claim token with an active lease rejects lease expiry extension."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        db_workflow = await repo.get(workflow.id)
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.RUNNING
+        assert db_workflow.lease_expires_at is not None
+
+    with pytest.raises(LeaseRenewalRejectedError):
+        await workflow_service.renew_lease(
+            workflow_id=workflow.id,
+            claim_token=uuid4()  # Invalid claim token
+        )
+
+    # DB workflow remains unchanged
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        rejected_db_workflow = await repo.get(workflow.id)
+
+        assert rejected_db_workflow
+        assert rejected_db_workflow.status == WorkflowStatus.RUNNING
+        assert rejected_db_workflow.lease_expires_at is not None
+
+        assert rejected_db_workflow.lease_expires_at == db_workflow.lease_expires_at
