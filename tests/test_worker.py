@@ -895,7 +895,8 @@ async def test_expired_lease_rejects_lease_extension(
 
     # Manually expire the current lease
     async with test_session_factory.begin() as session:
-        _expired_datetime_obj = datetime.now(timezone.utc) - timedelta(seconds=30)
+        _started_at_before_expired_datetime_obj = datetime.now(timezone.utc) - timedelta(minutes=5)
+        _expired_datetime_obj = datetime.now(timezone.utc) - timedelta(minutes=3)
 
         stmt = (
             update(Workflow)
@@ -905,6 +906,7 @@ async def test_expired_lease_rejects_lease_extension(
                 Workflow.status == WorkflowStatus.RUNNING
             )
             .values(
+                started_at=_started_at_before_expired_datetime_obj,
                 lease_expires_at=_expired_datetime_obj
             )
         )
