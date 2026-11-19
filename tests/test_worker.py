@@ -1,19 +1,19 @@
 import asyncio
-import pytest
-
-from uuid import uuid4
-from sqlalchemy import delete, update
+from datetime import timedelta, datetime, timezone
 from types import SimpleNamespace
-from datetime import timedelta
+from uuid import uuid4
 
+import pytest
+from sqlalchemy import delete, update
+
+from src.db.models.workflow import Workflow
 from src.enums import WorkflowStatus
 from src.exceptions.custom import WorkflowOwnershipLostError, LeaseRenewalRejectedError
-from src.services.workflow_service import WorkflowService
-from src.services.research_service import ResearchService
-from tests.conftest import TestAsyncSessionLocal
-from src.db.models.workflow import Workflow
-from src.worker.main import process_one_workflow
 from src.repositories.workflow_repository import WorkflowRepository
+from src.services.research_service import ResearchService
+from src.services.workflow_service import WorkflowService
+from src.worker.main import process_one_workflow
+from tests.conftest import TestAsyncSessionLocal
 
 
 async def test_two_workers_cannot_claim_same_workflow():
@@ -873,3 +873,56 @@ async def test_completed_workflow_rejects_lease_extension(
         assert rejected_db_workflow
         assert rejected_db_workflow.status == WorkflowStatus.COMPLETED
         assert rejected_db_workflow.lease_expires_at is None
+
+
+async def test_expired_lease_rejects_lease_extension(
+        test_session_factory
+) -> None:
+    """An already expired lease rejects lease extension request."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    # Manually expire the current lease
+    async with test_session_factory.begin() as session:
+        _expired_datetime_obj = datetime.now(timezone.utc) - timedelta(seconds=30)
+
+        stmt = (
+            update(Workflow)
+            .where(
+                Workflow.id == workflow.id,
+                Workflow.claim_token == claimed_workflow.claim_token,
+                Workflow.status == WorkflowStatus.RUNNING
+            )
+            .values(
+                lease_expires_at=_expired_datetime_obj
+            )
+        )
+
+        await session.execute(stmt)
+
+    with pytest.raises(LeaseRenewalRejectedError):
+        await workflow_service.renew_lease(
+            workflow_id=workflow.id,
+            claim_token=claimed_workflow.claim_token
+        )
+
+    # DB workflow remains unchanged
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        rejected_db_workflow = await repo.get(workflow.id)
+
+        assert rejected_db_workflow
+        assert rejected_db_workflow.status == WorkflowStatus.RUNNING
+        assert rejected_db_workflow.lease_expires_at == _expired_datetime_obj
