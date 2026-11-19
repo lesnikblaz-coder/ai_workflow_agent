@@ -832,3 +832,44 @@ async def test_incorrect_token_rejects_lease_extension(
         assert rejected_db_workflow.lease_expires_at is not None
 
         assert rejected_db_workflow.lease_expires_at == db_workflow.lease_expires_at
+
+
+async def test_completed_workflow_rejects_lease_extension(
+        test_session_factory
+) -> None:
+    """Workflow that is already completed rejects the lease extension execution."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    await workflow_service.complete(
+        workflow_id=workflow.id,
+        result="completed",
+        claim_token=claimed_workflow.claim_token
+    )
+
+    with pytest.raises(LeaseRenewalRejectedError):
+        await workflow_service.renew_lease(
+            workflow_id=workflow.id,
+            claim_token=claimed_workflow.claim_token
+        )
+
+    # DB workflow remains unchanged
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        rejected_db_workflow = await repo.get(workflow.id)
+
+        assert rejected_db_workflow
+        assert rejected_db_workflow.status == WorkflowStatus.COMPLETED
+        assert rejected_db_workflow.lease_expires_at is None
