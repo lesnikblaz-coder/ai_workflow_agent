@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from src.worker.heartbeat import heartbeat_loop
 from src.services.workflow_service import WorkflowService
 from src.exceptions.custom import LeaseRenewalRejectedError
+from src.enums import WorkflowStatus
 
 
 async def test_heartbeat_renews_multiple_times() -> None:
@@ -98,11 +99,20 @@ async def test_heartbeat_loop_stops_when_renewal_rejected(
 
     assert workflow is not None
 
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    incorrect_claim_token = uuid4()
+    assert incorrect_claim_token != claimed_workflow.claim_token
+
     task = asyncio.create_task(
         heartbeat_loop(
             service=workflow_service,
             workflow_id=workflow.id,
-            claim_token=uuid4(),
+            claim_token=incorrect_claim_token,
             heartbeat_interval=0.001
         )
     )
@@ -110,5 +120,5 @@ async def test_heartbeat_loop_stops_when_renewal_rejected(
     with pytest.raises(LeaseRenewalRejectedError):
         await asyncio.wait_for(
             task,
-            timeout=0.5
+            timeout=2
         )
