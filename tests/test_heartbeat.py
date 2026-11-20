@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 from src.worker.heartbeat import heartbeat_loop
 from src.services.workflow_service import WorkflowService
 from src.exceptions.custom import LeaseRenewalRejectedError
-from src.enums import WorkflowStatus
 
 
 async def test_heartbeat_renews_multiple_times() -> None:

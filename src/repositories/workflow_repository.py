@@ -1,7 +1,7 @@
 from uuid import UUID, uuid4
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
 from src.db.models.workflow import Workflow
 from src.schemas.workflow import ClaimedWorkflow
