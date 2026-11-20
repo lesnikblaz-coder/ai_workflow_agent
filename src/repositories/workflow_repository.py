@@ -76,6 +76,7 @@ class WorkflowRepository:
                 Workflow.id == workflow_id,
                 Workflow.claim_token == claim_token,
                 Workflow.status == WorkflowStatus.RUNNING,
+                Workflow.lease_expires_at > db_now
             )
             .values(
                 status=WorkflowStatus.COMPLETED,
@@ -107,7 +108,8 @@ class WorkflowRepository:
             .where(
                 Workflow.id == workflow_id,
                 Workflow.status == WorkflowStatus.RUNNING,
-                Workflow.claim_token == claim_token
+                Workflow.claim_token == claim_token,
+                Workflow.lease_expires_at > db_now
             )
             .values(
                 status=WorkflowStatus.FAILED,
@@ -151,7 +153,7 @@ class WorkflowRepository:
                 Workflow.id == workflow_id,
                 Workflow.claim_token == claim_token,
                 Workflow.status == WorkflowStatus.RUNNING,
-                Workflow.lease_expires_at > datetime.now(timezone.utc)
+                Workflow.lease_expires_at > db_now
             )
             .values(
                 lease_expires_at=(
