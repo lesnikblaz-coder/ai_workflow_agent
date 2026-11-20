@@ -84,3 +84,31 @@ async def test_heartbeat_cancellation() -> None:
         await task
 
     mock_workflow_service.renew_lease.assert_not_awaited()
+
+
+async def test_heartbeat_loop_stops_when_renewal_rejected(
+        test_session_factory
+) -> None:
+    """Heartbeat loop stops when the lease renewal is rejected (invalid claim_token)."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    task = asyncio.create_task(
+        heartbeat_loop(
+            service=workflow_service,
+            workflow_id=workflow.id,
+            claim_token=uuid4(),
+            heartbeat_interval=0.001
+        )
+    )
+
+    with pytest.raises(LeaseRenewalRejectedError):
+        await asyncio.wait_for(
+            task,
+            timeout=0.5
+        )
