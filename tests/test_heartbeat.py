@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 from src.worker.heartbeat import heartbeat_loop
 from src.services.workflow_service import WorkflowService
+from src.exceptions.custom import LeaseRenewalRejectedError
 
 
 async def test_heartbeat_renews_multiple_times() -> None:
@@ -56,3 +57,30 @@ async def test_heartbeat_renews_multiple_times() -> None:
 
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+async def test_heartbeat_cancellation() -> None:
+    """Heartbeat task correctly cancels while sleeping and doesn't execute additional renewals afterward."""
+    mock_workflow_service = AsyncMock(spec=WorkflowService)
+
+    workflow_id = uuid4()
+    claim_token = uuid4()
+
+    task = asyncio.create_task(
+        heartbeat_loop(
+            service=mock_workflow_service,
+            workflow_id=workflow_id,
+            claim_token=claim_token,
+            heartbeat_interval=10
+        )
+    )
+
+    # Give the event loop an opportunity to run the heartbeat task so it reaches its sleep
+    await asyncio.sleep(0)
+
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    mock_workflow_service.renew_lease.assert_not_awaited()
