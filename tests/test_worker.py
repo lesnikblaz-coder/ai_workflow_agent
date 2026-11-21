@@ -1005,3 +1005,72 @@ async def test_research_succeeds_heartbeat_stops(
     )
 
     workflow_service.fail.assert_not_awaited()
+
+
+async def test_failed_research_stops_heartbeat(
+        monkeypatch
+) -> None:
+    workflow_service = AsyncMock(spec=WorkflowService)
+    research_service = AsyncMock(spec=ResearchService)
+
+    workflow = ClaimedWorkflow(
+        id=uuid4(),
+        instruction="test",
+        claim_token=uuid4()
+    )
+
+    workflow_service.claim_next.return_value = workflow
+
+    heartbeat_started = asyncio.Event()
+    heartbeat_stopped = asyncio.Event()
+
+    async def mock_heartbeat(*args, **kwargs):
+        heartbeat_started.set()
+
+        try:
+            # Event that nobody ever signals
+            # Suspends indefinitely until something cancels it
+            await asyncio.Event().wait()
+        finally:
+            heartbeat_stopped.set()
+
+    monkeypatch.setattr(
+        "src.worker.main.heartbeat_loop",
+        mock_heartbeat
+    )
+
+    async def mock_research(instruction):
+        # Assert heartbeat starts before the research
+        await heartbeat_started.wait()
+        raise RuntimeError("Simulated research failure")
+
+    research_service.research.side_effect = mock_research
+
+    async def mock_fail(**kwargs):
+        assert heartbeat_stopped.is_set()
+
+    workflow_service.fail.side_effect = mock_fail
+
+    processed = await asyncio.wait_for(
+        process_one_workflow(
+            workflow_service,
+            research_service
+        ),
+        timeout=2
+    )
+
+    assert processed is True
+    assert heartbeat_started.is_set()
+    assert heartbeat_stopped.is_set()
+
+    research_service.research.assert_awaited_once_with(
+        workflow.instruction
+    )
+
+    workflow_service.fail.assert_awaited_once_with(
+        workflow_id=workflow.id,
+        error_msg=f"Workflow {workflow.id} failed.",
+        claim_token=workflow.claim_token
+    )
+
+    workflow_service.complete.assert_not_awaited()
