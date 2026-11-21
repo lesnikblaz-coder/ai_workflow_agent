@@ -976,6 +976,11 @@ async def test_research_succeeds_heartbeat_stops(
 
     research_service.research.side_effect = mock_research
 
+    async def mock_complete(**kwargs):
+        assert heartbeat_stopped.is_set()
+
+    workflow_service.complete.side_effect = mock_complete
+
     # Execute the actual worker
     processed = await asyncio.wait_for(
         process_one_workflow(
