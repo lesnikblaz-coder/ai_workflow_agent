@@ -1,15 +1,18 @@
 import asyncio
+import pytest
+
 from datetime import timedelta, datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
-
-import pytest
 from sqlalchemy import delete, update
+from unittest.mock import AsyncMock, Mock
 
 from src.db.models.workflow import Workflow
 from src.enums import WorkflowStatus
 from src.exceptions.custom import WorkflowOwnershipLostError, LeaseRenewalRejectedError
 from src.repositories.workflow_repository import WorkflowRepository
+from src.schemas.research import ResearchReportWithSources
+from src.schemas.workflow import ClaimedWorkflow
 from src.services.research_service import ResearchService
 from src.services.workflow_service import WorkflowService
 from src.worker.main import process_one_workflow
@@ -928,3 +931,72 @@ async def test_expired_lease_rejects_lease_extension(
         assert rejected_db_workflow
         assert rejected_db_workflow.status == WorkflowStatus.RUNNING
         assert rejected_db_workflow.lease_expires_at == _expired_datetime_obj
+
+
+async def test_research_succeeds_heartbeat_stops(
+        monkeypatch
+) -> None:
+    workflow_service = AsyncMock(spec=WorkflowService)
+    research_service = AsyncMock(spec=ResearchService)
+
+    workflow = ClaimedWorkflow(
+        id=uuid4(),
+        instruction="test",
+        claim_token=uuid4()
+    )
+
+    workflow_service.claim_next.return_value = workflow
+
+    report = Mock(spec=ResearchReportWithSources)
+    report.model_dump_json.return_value = '{}'
+
+    heartbeat_started = asyncio.Event()
+    heartbeat_stopped = asyncio.Event()
+
+    async def mock_heartbeat(*args, **kwargs):
+        heartbeat_started.set()
+
+        try:
+            # Event that nobody ever signals
+            # Suspends indefinitely until something cancels it
+            await asyncio.Event().wait()
+        finally:
+            heartbeat_stopped.set()
+
+    monkeypatch.setattr(
+        "src.worker.main.heartbeat_loop",
+        mock_heartbeat
+    )
+
+    # Waits until the heartbeat signals that it's
+    # running before returning the mocked report
+    async def mock_research(instruction):
+        await heartbeat_started.wait()
+        return report
+
+    research_service.research.side_effect = mock_research
+
+    # Execute the actual worker
+    processed = await asyncio.wait_for(
+        process_one_workflow(
+            workflow_service=workflow_service,
+            research_service=research_service
+        ),
+        timeout=2
+    )
+
+    assert processed is True
+    assert heartbeat_started.is_set()
+    assert heartbeat_stopped.is_set()
+
+    research_service.research.assert_awaited_once_with(
+        workflow.instruction
+    )
+
+    workflow_service.complete.assert_awaited_once_with(
+        workflow_id=workflow.id,
+        result='{}',
+        claim_token=workflow.claim_token
+    )
+
+    workflow_service.fail.assert_not_awaited()
