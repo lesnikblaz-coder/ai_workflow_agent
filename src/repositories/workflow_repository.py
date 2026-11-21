@@ -1,11 +1,12 @@
 from uuid import UUID, uuid4
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 
 from src.db.models.workflow import Workflow
 from src.schemas.workflow import ClaimedWorkflow
 from src.enums import WorkflowStatus
+from src.config import settings
 
 
 class WorkflowRepository:
@@ -42,9 +43,11 @@ class WorkflowRepository:
         if workflow is None:
             return None
 
+        db_now = func.statement_timestamp()
+
         workflow.status = WorkflowStatus.RUNNING
-        workflow.started_at = datetime.now(timezone.utc)
-        workflow.lease_expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+        workflow.started_at = db_now
+        workflow.lease_expires_at = db_now + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
 
         # Generate and assign a claim token (changes each execution attempt)
         claim_token = uuid4()
@@ -65,17 +68,20 @@ class WorkflowRepository:
         :return: updated Workflow | None
         """
 
+        db_now = func.statement_timestamp()
+
         stmt = (
             update(Workflow)
             .where(
                 Workflow.id == workflow_id,
                 Workflow.claim_token == claim_token,
                 Workflow.status == WorkflowStatus.RUNNING,
+                Workflow.lease_expires_at > db_now
             )
             .values(
                 status=WorkflowStatus.COMPLETED,
                 result=result,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=db_now,
                 lease_expires_at=None,
                 claim_token=None
             )
@@ -85,7 +91,6 @@ class WorkflowRepository:
         result = await self.session.execute(stmt)
 
         return result.scalar_one_or_none()
-
 
     async def workflow_fail(self, workflow_id: UUID, error_msg: str, claim_token: UUID) -> Workflow | None:
         """
@@ -96,17 +101,20 @@ class WorkflowRepository:
         :return: updated Workflow | None
         """
 
+        db_now = func.statement_timestamp()
+
         stmt = (
             update(Workflow)
             .where(
                 Workflow.id == workflow_id,
                 Workflow.status == WorkflowStatus.RUNNING,
-                Workflow.claim_token == claim_token
+                Workflow.claim_token == claim_token,
+                Workflow.lease_expires_at > db_now
             )
             .values(
                 status=WorkflowStatus.FAILED,
                 error_message=error_msg,
-                finished_at=datetime.now(timezone.utc),
+                finished_at=db_now,
                 lease_expires_at=None,
                 claim_token=None
             )
@@ -116,7 +124,6 @@ class WorkflowRepository:
         result = await self.session.execute(stmt)
 
         return result.scalar_one_or_none()
-
 
     async def _get_workflow_by_id(self, workflow_id: UUID) -> Workflow | None:
         stmt = (
@@ -129,3 +136,33 @@ class WorkflowRepository:
         workflow: Workflow | None = result.scalar_one_or_none()
 
         return workflow
+
+    async def renew_lease(self, workflow_id: UUID, claim_token: UUID) -> Workflow | None:
+        """
+        Valid heartbeat operation extends the lease expiry timer.
+        :param workflow_id:
+        :param claim_token:
+        :return: updated Workflow | None
+        """
+
+        db_now = func.statement_timestamp()
+
+        stmt = (
+            update(Workflow)
+            .where(
+                Workflow.id == workflow_id,
+                Workflow.claim_token == claim_token,
+                Workflow.status == WorkflowStatus.RUNNING,
+                Workflow.lease_expires_at > db_now
+            )
+            .values(
+                lease_expires_at=(
+                        db_now + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
+                )
+            )
+            .returning(Workflow)
+        )
+
+        result = await self.session.execute(stmt)
+
+        return result.scalar_one_or_none()

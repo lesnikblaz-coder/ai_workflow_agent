@@ -1,19 +1,22 @@
 import asyncio
 import pytest
 
+from datetime import timedelta, datetime, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 from sqlalchemy import delete, update
-from types import SimpleNamespace
-from datetime import timedelta
+from unittest.mock import AsyncMock, Mock
 
-from src.enums import WorkflowStatus
-from src.exceptions.custom import WorkflowOwnershipLostError
-from src.services.workflow_service import WorkflowService
-from src.services.research_service import ResearchService
-from tests.conftest import TestAsyncSessionLocal
 from src.db.models.workflow import Workflow
-from src.worker.main import process_one_workflow
+from src.enums import WorkflowStatus
+from src.exceptions.custom import WorkflowOwnershipLostError, LeaseRenewalRejectedError
 from src.repositories.workflow_repository import WorkflowRepository
+from src.schemas.research import ResearchReportWithSources
+from src.schemas.workflow import ClaimedWorkflow
+from src.services.research_service import ResearchService
+from src.services.workflow_service import WorkflowService
+from src.worker.main import process_one_workflow
+from tests.conftest import TestAsyncSessionLocal
 
 
 async def test_two_workers_cannot_claim_same_workflow():
@@ -742,3 +745,332 @@ async def test_stale_token_cannot_fail_workflow_owned_by_another_worker(
         assert db_workflow.status == WorkflowStatus.RUNNING
         assert db_workflow.claim_token == fresh_claim_token
         assert db_workflow.error_message is None
+
+
+async def test_valid_token_active_lease_successful_extension(
+        test_session_factory
+) -> None:
+    """Valid claim token with an active lease successfully extends lease expiry."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        db_workflow = await repo.get(workflow.id)
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.RUNNING
+        assert db_workflow.lease_expires_at is not None
+
+    await workflow_service.renew_lease(
+        workflow_id=workflow.id,
+        claim_token=claimed_workflow.claim_token
+    )
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        renewed_lease_db_workflow = await repo.get(workflow.id)
+
+        assert renewed_lease_db_workflow
+        assert renewed_lease_db_workflow.status == WorkflowStatus.RUNNING
+        assert renewed_lease_db_workflow.lease_expires_at is not None
+
+        assert renewed_lease_db_workflow.lease_expires_at > db_workflow.lease_expires_at
+
+
+async def test_incorrect_token_rejects_lease_extension(
+        test_session_factory
+) -> None:
+    """Invalid claim token with an active lease rejects lease expiry extension."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        db_workflow = await repo.get(workflow.id)
+
+        assert db_workflow
+        assert db_workflow.status == WorkflowStatus.RUNNING
+        assert db_workflow.lease_expires_at is not None
+
+    with pytest.raises(LeaseRenewalRejectedError):
+        await workflow_service.renew_lease(
+            workflow_id=workflow.id,
+            claim_token=uuid4()  # Invalid claim token
+        )
+
+    # DB workflow remains unchanged
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        rejected_db_workflow = await repo.get(workflow.id)
+
+        assert rejected_db_workflow
+        assert rejected_db_workflow.status == WorkflowStatus.RUNNING
+        assert rejected_db_workflow.lease_expires_at is not None
+
+        assert rejected_db_workflow.lease_expires_at == db_workflow.lease_expires_at
+
+
+async def test_completed_workflow_rejects_lease_extension(
+        test_session_factory
+) -> None:
+    """Workflow that is already completed rejects the lease extension execution."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    await workflow_service.complete(
+        workflow_id=workflow.id,
+        result="completed",
+        claim_token=claimed_workflow.claim_token
+    )
+
+    with pytest.raises(LeaseRenewalRejectedError):
+        await workflow_service.renew_lease(
+            workflow_id=workflow.id,
+            claim_token=claimed_workflow.claim_token
+        )
+
+    # DB workflow remains unchanged
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        rejected_db_workflow = await repo.get(workflow.id)
+
+        assert rejected_db_workflow
+        assert rejected_db_workflow.status == WorkflowStatus.COMPLETED
+        assert rejected_db_workflow.lease_expires_at is None
+
+
+async def test_expired_lease_rejects_lease_extension(
+        test_session_factory
+) -> None:
+    """An already expired lease rejects lease extension request."""
+    workflow_service = WorkflowService(
+        session_factory=test_session_factory
+    )
+
+    workflow = await workflow_service.create("test")
+
+    assert workflow is not None
+
+    claimed_workflow = await workflow_service.claim_next()
+
+    assert claimed_workflow is not None
+    assert claimed_workflow.id == workflow.id
+    assert claimed_workflow.claim_token is not None
+
+    # Manually expire the current lease
+    async with test_session_factory.begin() as session:
+        _started_at_before_expired_datetime_obj = datetime.now(timezone.utc) - timedelta(minutes=5)
+        _expired_datetime_obj = datetime.now(timezone.utc) - timedelta(minutes=3)
+
+        stmt = (
+            update(Workflow)
+            .where(
+                Workflow.id == workflow.id,
+                Workflow.claim_token == claimed_workflow.claim_token,
+                Workflow.status == WorkflowStatus.RUNNING
+            )
+            .values(
+                started_at=_started_at_before_expired_datetime_obj,
+                lease_expires_at=_expired_datetime_obj
+            )
+        )
+
+        await session.execute(stmt)
+
+    with pytest.raises(LeaseRenewalRejectedError):
+        await workflow_service.renew_lease(
+            workflow_id=workflow.id,
+            claim_token=claimed_workflow.claim_token
+        )
+
+    # DB workflow remains unchanged
+    async with test_session_factory.begin() as session:
+        repo = WorkflowRepository(session)
+
+        rejected_db_workflow = await repo.get(workflow.id)
+
+        assert rejected_db_workflow
+        assert rejected_db_workflow.status == WorkflowStatus.RUNNING
+        assert rejected_db_workflow.lease_expires_at == _expired_datetime_obj
+
+
+async def test_research_succeeds_heartbeat_stops(
+        monkeypatch
+) -> None:
+    workflow_service = AsyncMock(spec=WorkflowService)
+    research_service = AsyncMock(spec=ResearchService)
+
+    workflow = ClaimedWorkflow(
+        id=uuid4(),
+        instruction="test",
+        claim_token=uuid4()
+    )
+
+    workflow_service.claim_next.return_value = workflow
+
+    report = Mock(spec=ResearchReportWithSources)
+    report.model_dump_json.return_value = '{}'
+
+    heartbeat_started = asyncio.Event()
+    heartbeat_stopped = asyncio.Event()
+
+    async def mock_heartbeat(*args, **kwargs):
+        heartbeat_started.set()
+
+        try:
+            # Event that nobody ever signals
+            # Suspends indefinitely until something cancels it
+            await asyncio.Event().wait()
+        finally:
+            heartbeat_stopped.set()
+
+    monkeypatch.setattr(
+        "src.worker.main.heartbeat_loop",
+        mock_heartbeat
+    )
+
+    # Waits until the heartbeat signals that it's
+    # running before returning the mocked report
+    async def mock_research(instruction):
+        await heartbeat_started.wait()
+        return report
+
+    research_service.research.side_effect = mock_research
+
+    async def mock_complete(**kwargs):
+        assert heartbeat_stopped.is_set()
+
+    workflow_service.complete.side_effect = mock_complete
+
+    # Execute the actual worker
+    processed = await asyncio.wait_for(
+        process_one_workflow(
+            workflow_service=workflow_service,
+            research_service=research_service
+        ),
+        timeout=2
+    )
+
+    assert processed is True
+    assert heartbeat_started.is_set()
+    assert heartbeat_stopped.is_set()
+
+    research_service.research.assert_awaited_once_with(
+        workflow.instruction
+    )
+
+    workflow_service.complete.assert_awaited_once_with(
+        workflow_id=workflow.id,
+        result='{}',
+        claim_token=workflow.claim_token
+    )
+
+    workflow_service.fail.assert_not_awaited()
+
+
+async def test_failed_research_stops_heartbeat(
+        monkeypatch
+) -> None:
+    workflow_service = AsyncMock(spec=WorkflowService)
+    research_service = AsyncMock(spec=ResearchService)
+
+    workflow = ClaimedWorkflow(
+        id=uuid4(),
+        instruction="test",
+        claim_token=uuid4()
+    )
+
+    workflow_service.claim_next.return_value = workflow
+
+    heartbeat_started = asyncio.Event()
+    heartbeat_stopped = asyncio.Event()
+
+    async def mock_heartbeat(*args, **kwargs):
+        heartbeat_started.set()
+
+        try:
+            # Event that nobody ever signals
+            # Suspends indefinitely until something cancels it
+            await asyncio.Event().wait()
+        finally:
+            heartbeat_stopped.set()
+
+    monkeypatch.setattr(
+        "src.worker.main.heartbeat_loop",
+        mock_heartbeat
+    )
+
+    async def mock_research(instruction):
+        # Assert heartbeat starts before the research
+        await heartbeat_started.wait()
+        raise RuntimeError("Simulated research failure")
+
+    research_service.research.side_effect = mock_research
+
+    async def mock_fail(**kwargs):
+        assert heartbeat_stopped.is_set()
+
+    workflow_service.fail.side_effect = mock_fail
+
+    processed = await asyncio.wait_for(
+        process_one_workflow(
+            workflow_service,
+            research_service
+        ),
+        timeout=2
+    )
+
+    assert processed is True
+    assert heartbeat_started.is_set()
+    assert heartbeat_stopped.is_set()
+
+    research_service.research.assert_awaited_once_with(
+        workflow.instruction
+    )
+
+    workflow_service.fail.assert_awaited_once_with(
+        workflow_id=workflow.id,
+        error_msg=f"Workflow {workflow.id} failed.",
+        claim_token=workflow.claim_token
+    )
+
+    workflow_service.complete.assert_not_awaited()
