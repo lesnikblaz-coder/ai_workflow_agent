@@ -1074,3 +1074,75 @@ async def test_failed_research_stops_heartbeat(
     )
 
     workflow_service.complete.assert_not_awaited()
+
+
+async def test_heartbeat_failure_cancels_pending_research(
+        monkeypatch
+) -> None:
+    """Heartbeat failure while research is pending must cancel without persisting a result."""
+    workflow_service = AsyncMock(spec=WorkflowService)
+    research_service = AsyncMock(spec=ResearchService)
+
+    workflow = ClaimedWorkflow(
+        id=uuid4(),
+        instruction="test",
+        claim_token=uuid4()
+    )
+
+    workflow_service.claim_next.return_value = workflow
+
+    heartbeat_started = asyncio.Event()
+    research_started = asyncio.Event()
+    research_stopped = asyncio.Event()
+    research_cancelled = asyncio.Event()
+
+    async def mock_heartbeat(*args, **kwargs):
+        heartbeat_started.set()
+
+        # Ensure research is actually running before failing.
+        await research_started.wait()
+
+        raise LeaseRenewalRejectedError(workflow_id=workflow.id)
+
+    monkeypatch.setattr(
+        "src.worker.main.heartbeat_loop",
+        mock_heartbeat
+    )
+
+    async def mock_research(instruction):
+        await heartbeat_started.wait()
+
+        research_started.set()
+
+        try:
+            # Event that nobody ever signals
+            # Suspends indefinitely until something cancels it
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            research_cancelled.set()
+            raise
+        finally:
+            research_stopped.set()
+
+    research_service.research.side_effect = mock_research
+
+    # Execute the actual worker
+    processed = await asyncio.wait_for(
+        process_one_workflow(
+            workflow_service=workflow_service,
+            research_service=research_service
+        ),
+        timeout=2
+    )
+
+    assert processed is True
+    assert research_started.is_set()
+    assert research_stopped.is_set()
+    assert research_cancelled.is_set()
+
+    research_service.research.assert_awaited_once_with(
+        workflow.instruction
+    )
+
+    workflow_service.complete.assert_not_awaited()
+    workflow_service.fail.assert_not_awaited()
