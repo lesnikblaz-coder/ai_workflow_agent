@@ -1,5 +1,6 @@
 from uuid import UUID, uuid4
 from sqlalchemy import select, update, func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 
@@ -7,6 +8,7 @@ from src.db.models.workflow import Workflow
 from src.schemas.workflow import ClaimedWorkflow
 from src.enums import WorkflowStatus
 from src.config import settings
+from src.exceptions.custom import DatabaseSaveError
 
 
 class WorkflowRepository:
@@ -61,7 +63,7 @@ class WorkflowRepository:
 
     async def workflow_completion(self, workflow_id: UUID, result: str, claim_token: UUID) -> Workflow | None:
         """
-        Performs an atomic conditional update (completion).
+        Atomically completes a workflow if the claim is still valid.
         :param workflow_id: UUID
         :param result: str
         :param claim_token: UUID
@@ -88,9 +90,13 @@ class WorkflowRepository:
             .returning(Workflow)
         )
 
-        result = await self.session.execute(stmt)
+        try:
+            db_result = await self.session.execute(stmt)
 
-        return result.scalar_one_or_none()
+        except SQLAlchemyError as exc:
+            raise DatabaseSaveError() from exc
+
+        return db_result.scalar_one_or_none()
 
     async def workflow_fail(self, workflow_id: UUID, error_msg: str, claim_token: UUID) -> Workflow | None:
         """

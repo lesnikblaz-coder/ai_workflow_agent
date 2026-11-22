@@ -38,3 +38,8 @@ class LeaseRenewalRejectedError(AppException):
         )
 
         super().__init__(detail)
+
+
+class DatabaseSaveError(AppException):
+    status_code = 500
+    detail = "Failed to persist database changes."
