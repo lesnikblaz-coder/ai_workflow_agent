@@ -12,7 +12,7 @@ from src.services.research_service import ResearchService
 from src.agents.research_agent import ResearchAgent
 from src.config import settings
 from src.tools.web_search import WebSearchTool
-from src.exceptions.custom import WorkflowOwnershipLostError, LeaseRenewalRejectedError
+from src.exceptions.custom import WorkflowOwnershipLostError, LeaseRenewalRejectedError, DatabaseSaveError
 from src.worker.heartbeat import heartbeat_loop
 
 
@@ -117,7 +117,13 @@ async def process_one_workflow(
             workflow.id,
         )
 
-        return True
+
+    except DatabaseSaveError:
+        logger.exception(
+            "Workflow %s database persistence failed.",
+            workflow.id
+        )
+
 
     except Exception:
         logger.exception("Workflow %s failed", workflow.id)
@@ -136,8 +142,6 @@ async def process_one_workflow(
                 "Workflow %s lost execution ownership",
                 workflow.id,
             )
-
-        return True
 
     return True
 
