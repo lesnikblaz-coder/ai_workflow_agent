@@ -27,9 +27,10 @@ class WebSearchTool:
             },
             json={
                 "query": query,
-                "search_depth": "basic",
+                "search_depth": "advanced",
                 "max_results": max_results,
-                "include_answer": False
+                "include_answer": False,
+                "include_raw_content": True
             }
         )
 
@@ -41,7 +42,7 @@ class WebSearchTool:
             SearchResult(
                 title=item["title"],
                 url=item["url"],
-                snippet=item["content"]
+                snippet=item.get("raw_content") or item["content"]
             )
             for item in data["results"]
         ]
