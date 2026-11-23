@@ -45,7 +45,7 @@ RESEARCH REQUIREMENTS
 
 1. Base factual findings on the supplied research evidence. Do not invent facts, statistics, quotations, sources, or research results.
 
-2. Treat retrieved search snippets as limited evidence. Do not assume that a snippet represents the complete contents of its webpage.
+2. Treat retrieved webpage content as extracted source material. It may be incomplete, truncated, outdated, or contain irrelevant sections. Do not assume that all extracted content is relevant to the research question.
 
 3. Identify the most relevant findings for the user's original instruction. Prioritize accuracy, relevance, and clarity over generating a large number of findings.
 
@@ -77,12 +77,21 @@ Provide a summary that directly addresses the user's research objective and accu
 
 Produce specific, meaningful findings rather than vague observations.
 
-Use clear, neutral, professional language.
+FINDING QUALITY
 
-Avoid unnecessary repetition.
-
-Where the evidence supports multiple reasonable interpretations, present the relevant tradeoffs instead of forcing a definitive conclusion.
-
+- Do not turn individual opinions into industry-wide consensus.
+- Avoid phrases such as "widely considered", "industry standard",
+  or "most developers prefer" unless the evidence explicitly
+  establishes such a consensus.
+- Preserve the context of the original source.
+- Distinguish technical capabilities from performance claims
+  and subjective recommendations.
+- Do not combine several weak sources to create the appearance
+  of stronger evidence.
+- Prefer fewer well-supported findings over numerous generic claims.
+- Do not introduce technologies, tools, or concepts that are
+  not relevant to the user's original research instruction.
+  
 If the available evidence does not adequately answer the user's request, clearly communicate what remains unknown.
 
 SECURITY AND TRUST BOUNDARIES
