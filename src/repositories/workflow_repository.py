@@ -1,6 +1,5 @@
 from uuid import UUID, uuid4
 from sqlalchemy import select, update, func
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import timedelta
 
@@ -8,7 +7,6 @@ from src.db.models.workflow import Workflow
 from src.schemas.workflow import ClaimedWorkflow
 from src.enums import WorkflowStatus
 from src.config import settings
-from src.exceptions.custom import DatabaseSaveError
 
 
 class WorkflowRepository:
@@ -30,26 +28,50 @@ class WorkflowRepository:
         return result.scalar_one_or_none()
 
     async def claim_next(self) -> ClaimedWorkflow | None:
-        stmt = (
+        """
+        First attempts to claim workflows with running status and expired leases.
+
+        If none are found, attempts to claim queued workflows.
+        """
+
+        db_now = func.statement_timestamp()
+
+        stale_lease_wf_stmt = (
             select(Workflow)
-            .where(Workflow.status == WorkflowStatus.QUEUED)
+            .where(
+                Workflow.status == WorkflowStatus.RUNNING,
+                Workflow.lease_expires_at < db_now
+            )
             .order_by(Workflow.created_at.asc())
             .limit(1)
             .with_for_update(skip_locked=True)
         )
 
-        result = await self.session.execute(stmt)
-
+        result = await self.session.execute(stale_lease_wf_stmt)
         workflow: Workflow | None = result.scalar_one_or_none()
 
         if workflow is None:
-            return None
+            queued_wf_stmt = (
+                select(Workflow)
+                .where(Workflow.status == WorkflowStatus.QUEUED)
+                .order_by(Workflow.created_at.asc())
+                .limit(1)
+                .with_for_update(skip_locked=True)
+            )
 
-        db_now = func.statement_timestamp()
+            result = await self.session.execute(queued_wf_stmt)
+            workflow: Workflow | None = result.scalar_one_or_none()
 
-        workflow.status = WorkflowStatus.RUNNING
-        workflow.started_at = db_now
-        workflow.lease_expires_at = db_now + timedelta(minutes=settings.LEASE_EXPIRY_MINUTES)
+            if workflow is None:
+                return None
+
+            # Only set these if it claimed a newly queued workflow
+            workflow.status = WorkflowStatus.RUNNING
+            workflow.started_at = db_now
+
+        workflow.lease_expires_at = db_now + timedelta(
+            minutes=settings.LEASE_EXPIRY_MINUTES
+        )
 
         # Generate and assign a claim token (changes each execution attempt)
         claim_token = uuid4()
@@ -90,11 +112,7 @@ class WorkflowRepository:
             .returning(Workflow)
         )
 
-        try:
-            db_result = await self.session.execute(stmt)
-
-        except SQLAlchemyError as exc:
-            raise DatabaseSaveError() from exc
+        db_result = await self.session.execute(stmt)
 
         return db_result.scalar_one_or_none()
 
